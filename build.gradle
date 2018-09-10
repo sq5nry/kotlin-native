@@ -466,3 +466,12 @@ task clean {
         delete bundle.outputs.files
     }
 }
+
+task ttt {
+    doLast {
+        println(project.findProperty("teamcity"))
+        project.properties.each {
+            println("$it.key: $it.value")
+        }
+    }
+}
