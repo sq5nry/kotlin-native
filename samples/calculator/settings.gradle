@@ -13,5 +13,4 @@ if (localProperties.containsKey("sdk.dir") || System.getenv('ANDROID_HOME') != n
     include ':android'
 }
 
-includeBuild '../../shared'
 includeBuild '../../tools/kotlin-native-gradle-plugin'

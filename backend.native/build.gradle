@@ -101,6 +101,7 @@ configurations {
     kotlin_stdlib_jar
     kotlin_reflect_jar
     kotlin_script_runtime_jar
+    kotlin_native_shared_jar
     kotlin_common_stdlib_src
 
     cli_bcRuntime {
@@ -118,6 +119,7 @@ dependencies {
     kotlin_stdlib_jar "$kotlinStdLibModule@jar"
     kotlin_reflect_jar "$kotlinReflectModule@jar"
     kotlin_script_runtime_jar "$kotlinScriptRuntimeModule@jar"
+    kotlin_native_shared_jar "$kotlinNativeSharedModule@jar"
     kotlin_common_stdlib_src kotlinCommonStdlibModule
 
     compilerCompile "com.google.protobuf:protobuf-java:${protobufVersion}"
@@ -125,11 +127,11 @@ dependencies {
     compilerCompile kotlinCompilerModule
     compilerCompile kotlinNativeInterop['llvm'].configuration
     compilerCompile kotlinNativeInterop['hash'].configuration
-    compilerCompile "org.jetbrains.kotlin:kotlin-native-shared:$konanVersion"
+    compilerCompile kotlinNativeSharedModule
     compilerCompile "org.jetbrains.kotlin:konan.serializer:$konanVersion"
 
     cli_bcCompile kotlinCompilerModule
-    cli_bcCompile "org.jetbrains.kotlin:kotlin-native-shared:$konanVersion"
+    cli_bcCompile kotlinNativeSharedModule
     cli_bcCompile sourceSets.compiler.output
     cli_bcCompile "org.jetbrains.kotlin:konan.serializer:$konanVersion"
 
@@ -255,7 +257,7 @@ jar {
     dependsOn ':runtime:hostRuntime', 'external_jars'
 }
 
-def externalJars = ['compiler', 'stdlib', 'reflect', 'script_runtime']
+def externalJars = ['compiler', 'stdlib', 'reflect', 'script_runtime', 'native_shared']
 
 externalJars.each { arg ->
     def jar = arg.replace('_', '-') // :(

@@ -23,5 +23,4 @@ include ':win32'
 include ':videoplayer'
 include ':workers'
 
-includeBuild '../shared'
 includeBuild '../tools/kotlin-native-gradle-plugin'
