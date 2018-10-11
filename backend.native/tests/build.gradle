@@ -145,7 +145,7 @@ task smallTest {
 // Collect results in one json.
 task resultsTask() {
     doLast {
-        Map<String, Map<String, RunExternalTestGroup.TestResult>> results = [:]
+        Map<String, Map<String, TestResult>> results = [:]
         def statistics = new Statistics()
         tasks.withType(RunExternalTestGroup).matching { it.state.executed }.each {
             results.put(it.name, it.results)
