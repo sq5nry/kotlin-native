@@ -76,10 +76,12 @@ abstract class KonanTest extends JavaExec {
         // We don't build the compiler if a custom dist path is specified.
         if (!project.ext.useCustomDist) {
             dependsOn(project.rootProject.tasks['dist'])
+            dependsOn(project.rootProject.tasks['distPlatformLibs'])
             if (project.testTarget) {
                 // if a test_target property is set then tests should depend on a crossDist
                 // otherwise runtime components would not be build for a target
                 dependsOn(project.rootProject.tasks["${target}CrossDist"])
+                dependsOn(project.rootProject.tasks["${target}PlatformLibs"])
             }
         }
     }
@@ -291,10 +293,6 @@ class RunDriverKonanTest extends KonanTest {
 
     RunDriverKonanTest() {
         super()
-        // We don't build the compiler if a custom konan.home path is specified.
-        if (!project.hasProperty("konan.home")) {
-            dependsOn(project.rootProject.tasks['cross_dist'])
-        }
     }
 
     void compileTest(List<String> filesToCompile, String exe) {
