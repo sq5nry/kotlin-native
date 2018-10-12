@@ -70,9 +70,16 @@ fun runTopLevelPhases(konanConfig: KonanConfig, environment: KotlinCoreEnvironme
 
         val deserializer = IrModuleDeserialization(context as WithLogger, generatorContext.irBuiltIns)
         val specifics = context.config.configuration.get(CommonConfigurationKeys.LANGUAGE_VERSION_SETTINGS)!!
-        val dependencies = context.config.resolvedLibraries.getFullList().map {
-            val moduleDescriptor = DefaultDeserializedDescriptorFactory.createDescriptorAndNewBuiltIns(it, specifics,  LockBasedStorageManager())
-            deserializer.deserializedIrModule(moduleDescriptor, it.wholeIr, {index -> it.irDeclaration(index)})
+        val libraries = context.config.resolvedLibraries.getFullList()
+
+        val dependencies = libraries.map{
+            DefaultDeserializedDescriptorFactory.createDescriptorAndNewBuiltIns(it, specifics,  LockBasedStorageManager())
+        }
+
+        dependencies.forEach { it.setDependencies(dependencies) } // set all of them as dependencies to all of them. Nice!
+
+        val irModules = libraries.mapIndexed { index,it ->
+            deserializer.deserializedIrModule(dependencies[index], it.wholeIr, {uniqid -> it.irDeclaration(uniqid)})
         }
 
         val module = translator.generateModuleFragment(generatorContext, environment.getSourceFiles(), deserializer)
