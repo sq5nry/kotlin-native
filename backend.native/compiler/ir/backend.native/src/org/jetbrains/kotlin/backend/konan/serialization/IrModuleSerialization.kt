@@ -36,6 +36,8 @@ import org.jetbrains.kotlin.ir.types.impl.*
 import org.jetbrains.kotlin.metadata.KonanIr
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.backend.common.WithLogger
+import org.jetbrains.kotlin.backend.konan.descriptors.isExpectMember
+import org.jetbrains.kotlin.backend.konan.descriptors.isSerializableExpectClass
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.isReal
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.name
 import org.jetbrains.kotlin.backend.konan.library.SerializedIr
@@ -97,10 +99,10 @@ internal class IrModuleSerialization(val logger: WithLogger,
         else
             declaration
 
-        val index = if (isAccessor) {
+        val index: Long? = if (isAccessor) {
             declarationTable.indexByValue((realDeclaration as IrSimpleFunction).correspondingProperty!!)
         } else if (isDefaultConstructor || isEnumEntry) {
-            -1
+            null
         } else {
             declarationTable.indexByValue(realDeclaration)
         }
@@ -109,7 +111,8 @@ internal class IrModuleSerialization(val logger: WithLogger,
             .setPackageFqName(packageFqName)
             .setClassFqName(classFqName)
             .setName(descriptor.name.toString())
-            .setUniqId(newUniqId(index))
+
+        if (index != null) proto.setUniqId(newUniqId(index))
 
         if (isFakeOverride) {
             proto.setIsFakeOverride(true)
@@ -172,6 +175,8 @@ internal class IrModuleSerialization(val logger: WithLogger,
         val index = declarationTable.indexByValue(symbol.owner as IrDeclaration) // TODO: change symbol to be IrSymbolDeclaration?
         proto.setUniqId(newUniqId(index))
         val owner = symbol.owner as IrDeclaration
+
+        println("serializeIrSymbol: index = $index, descriptor = ${symbol.descriptor}, owner = $owner")
 
         val result =  proto.build()
         return result
@@ -367,6 +372,7 @@ internal class IrModuleSerialization(val logger: WithLogger,
         val proto = KonanIr.IrFunctionReference.newBuilder()
             .setSymbol(serializeIrSymbol(callable.symbol))
             .setTypeArguments(serializeTypeArguments(callable))
+            .setValueArgumentsCount(callable.descriptor.valueParameters.size)
         callable.origin?.let { proto.origin = (it as IrStatementOriginImpl).debugName }
         return proto.build()
     }
@@ -748,6 +754,7 @@ internal class IrModuleSerialization(val logger: WithLogger,
                 .setName(parameter.name.toString())
                 .setIndex(parameter.index)
                 .setVariance(serializeIrTypeVariance(parameter.variance))
+                .setIsReified(parameter.isReified)
         parameter.superTypes.forEach {
             proto.addSuperType(serializeIrType(it))
         }
@@ -1009,6 +1016,7 @@ internal class IrModuleSerialization(val logger: WithLogger,
 
         file.declarations.forEach {
             if (it is IrTypeAlias) return@forEach
+            if (it.descriptor.isExpectMember && !it.descriptor.isSerializableExpectClass) return@forEach
 
             val byteArray = serializeDeclaration(it).toByteArray()
             val index = declarationTable.indexByValue(it)

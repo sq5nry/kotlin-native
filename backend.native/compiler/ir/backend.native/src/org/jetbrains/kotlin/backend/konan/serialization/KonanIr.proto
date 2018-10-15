@@ -2,51 +2,14 @@
 syntax = "proto2";
 package org.jetbrains.kotlin.metadata;
 
-//import "org/jetbrains/kotlin/backend/konan/serialization/metadata.proto1";
 option java_outer_classname = "KonanIr";
 option optimize_for = LITE_RUNTIME;
 
-/*
-// This is subject to change.
-// One can think of it as a 'descriptor reference'.
-// The real descriptor data is encoded in KonanLinkdData.
-message KotlinDescriptor {
-    enum Kind {
-        FUNCTION = 1;
-        VARIABLE = 2;
-        CLASS = 3;
-        VALUE_PARAMETER = 4;
-        CONSTRUCTOR = 5;
-        TYPE_PARAMETER = 6;
-        RECEIVER = 7;
-        ACCESSOR = 8;
-        PROPERTY = 9;
-    }
-    // TODO: Use the string table index.
-    optional string name = 1;
-    required Kind kind = 2;
-    required UniqId uniq_id = 3;
-    required UniqId original_uniq_id = 4;
-    // index in fq name table
-    optional int32 class_or_package = 5;
-
-    // Descriptor kind specific fields.
-    // TODO: consider introducing specific messages
-    // for functions, variables etc.
-    optional KotlinType type = 6;
-    repeated KotlinDescriptor value_parameter = 7;
-    repeated KotlinDescriptor type_parameter = 8;
-    optional UniqId dispatch_receiver_uniq_id = 9;
-    optional UniqId extension_receiver_uniq_id = 10;
-    optional KotlinType extension_receiver_type = 11;
-    optional LocalDeclaration ir_local_declaration = 12;
-}
-*/
 
 message DescriptorReference {
     required string package_fq_name = 1;
     required string class_fq_name = 2;
-    required UniqId uniq_id = 3;
+    optional UniqId uniq_id = 3;
     required string name = 9;
 
     optional bool is_getter = 4 [default=false];
@@ -58,31 +21,8 @@ message DescriptorReference {
 }
 
 message UniqId {
-    required int64 index = 1;
+    required uint64 index = 1;
 }
-/*
-// Inner descriptors used for inlining.
-message DeclarationDescriptor {
-    // These are ProtoBuf.Function, ProtoBuf.Class etc
-    oneof descriptor {
-        Function function = 1;
-        Class clazz = 2;
-        Property property = 3;
-        Constructor constructor = 4;
-    }
-}
-
-message LocalDeclaration {
-    required DeclarationDescriptor descriptor = 1;
-}
-*/
-/*
-message KotlinType {
-    required int32 index = 1;
-    required bool isCaptured = 2; // TODO: make it a flag set?
-    optional string debug_text = 3; // TODO: remove me
-}
-*/
 
 message KotlinType {
 
@@ -234,6 +174,7 @@ message IrCall {
 message IrFunctionReference {
     required IrSymbol symbol = 1;
     required TypeArguments type_arguments = 2;
+    required int32 value_arguments_count = 4;
     optional string origin = 3;
 }
 
@@ -554,6 +495,7 @@ message IrTypeParameter {
     required int32 index = 3;
     required IrTypeVariance variance = 4;
     repeated IrType super_type = 5;
+    required bool is_reified = 6;
 }
 
 message IrTypeParameterContainer {

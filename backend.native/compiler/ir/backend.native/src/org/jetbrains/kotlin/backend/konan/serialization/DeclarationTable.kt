@@ -42,9 +42,8 @@ internal fun IrDeclaration.symbolName(): String = when (this) {
     else -> error("Unexpected exported declaration: $this")
 }
 
-internal val IrDeclaration.uniqId
-    get() = this.symbolName().localHash.value
-
+internal val IrDeclaration.uniqId: Long
+    get() = this.symbolName().localHash.value.toLong()
 
 // TODO: We don't manage id clashes anyhow now.
 class DeclarationTable(val builtIns: IrBuiltIns) {
@@ -96,13 +95,15 @@ class IrDeserializationDescriptorIndex(irBuiltIns: IrBuiltIns) {
 
 }
 */
-val IrBuiltIns.knownBuiltins // TODO: why do we have this list??? We need the complete list!
+val IrBuiltIns.knownBuiltins: List<IrSimpleFunction> // TODO: why do we have this list??? We need the complete list!
     get() = (lessFunByOperandType.values +
             lessOrEqualFunByOperandType.values +
             greaterOrEqualFunByOperandType.values +
             greaterFunByOperandType.values +
             ieee754equalsFunByOperandType.values +
-            eqeqeqFun + eqeqFun + throwNpeFun + booleanNotFun + noWhenBranchMatchedExceptionFun + enumValueOfFun)
+            eqeqeqFun + eqeqFun +
+            throwNpeFun + booleanNotFun + noWhenBranchMatchedExceptionFun + enumValueOfFun +
+            dataClassArrayMemberToStringFun + dataClassArrayMemberHashCodeFun)
 
 
 internal val IrProperty.symbolName: String

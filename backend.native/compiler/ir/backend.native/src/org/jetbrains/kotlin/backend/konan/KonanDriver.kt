@@ -13,6 +13,7 @@ import org.jetbrains.kotlin.backend.konan.ir.KonanSymbols
 import org.jetbrains.kotlin.backend.konan.ir.ModuleIndex
 import org.jetbrains.kotlin.backend.konan.llvm.emitLLVM
 import org.jetbrains.kotlin.backend.konan.serialization.*
+import org.jetbrains.kotlin.builtins.konan.KonanBuiltIns
 import org.jetbrains.kotlin.cli.common.messages.AnalyzerWithCompilerReport
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
@@ -20,6 +21,7 @@ import org.jetbrains.kotlin.config.languageVersionSettings
 import org.jetbrains.kotlin.konan.utils.KonanFactories.DefaultDeserializedDescriptorFactory
 import org.jetbrains.kotlin.psi2ir.Psi2IrConfiguration
 import org.jetbrains.kotlin.psi2ir.Psi2IrTranslator
+import org.jetbrains.kotlin.serialization.konan.impl.moduleToLibrary
 import org.jetbrains.kotlin.storage.LockBasedStorageManager
 
 fun runTopLevelPhases(konanConfig: KonanConfig, environment: KotlinCoreEnvironment) {
@@ -68,18 +70,14 @@ fun runTopLevelPhases(konanConfig: KonanConfig, environment: KotlinCoreEnvironme
 
         val symbols = KonanSymbols(context, generatorContext.symbolTable, generatorContext.symbolTable.lazyWrapper)
 
-        val deserializer = IrModuleDeserialization(context as WithLogger, generatorContext.irBuiltIns)
+        val deserializer = IrModuleDeserialization(context as WithLogger, context.moduleDescriptor, generatorContext.irBuiltIns)
         val specifics = context.config.configuration.get(CommonConfigurationKeys.LANGUAGE_VERSION_SETTINGS)!!
-        val libraries = context.config.resolvedLibraries.getFullList()
+        //val libraries = context.config.resolvedLibraries.getFullList()
 
-        val dependencies = libraries.map{
-            DefaultDeserializedDescriptorFactory.createDescriptorAndNewBuiltIns(it, specifics,  LockBasedStorageManager())
-        }
-
-        dependencies.forEach { it.setDependencies(dependencies) } // set all of them as dependencies to all of them. Nice!
-
-        val irModules = libraries.mapIndexed { index,it ->
-            deserializer.deserializedIrModule(dependencies[index], it.wholeIr, {uniqid -> it.irDeclaration(uniqid)})
+        val irModules = context.moduleDescriptor.allDependencyModules.map {
+            val library = moduleToLibrary[it]
+            if (library == null) return@map
+            deserializer.deserializedIrModule(it, library.wholeIr, {uniqid -> library.irDeclaration(uniqid)})
         }
 
         val module = translator.generateModuleFragment(generatorContext, environment.getSourceFiles(), deserializer)

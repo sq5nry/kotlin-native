@@ -15,5 +15,5 @@ internal object DefaultMetadataReaderImpl : MetadataReader {
             libraryLayout.wholeIrFile.readBytes()
 
     override fun loadIrDeclaraton(libraryLayout: KonanLibraryLayout, index: Long): ByteArray =
-            libraryLayout.declarationFile(index.toString(16)).readBytes()
+            libraryLayout.declarationFile(index.toULong().toString(16)).readBytes()
 }

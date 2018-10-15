@@ -25,12 +25,9 @@ internal class KonanSerializerExtension(val context: Context, override val metad
     override val stringTable = KonanStringTable()
     override fun shouldUseTypeTable(): Boolean = true
 
-    fun uniqId(descriptor: DeclarationDescriptor): KonanProtoBuf.DescriptorUniqId {
-        if (declarationTable.descriptors[descriptor] == null) {
-            println("### no declaration for descriptor: $descriptor")
-        }
-        val index = declarationTable.descriptors[descriptor] ?: -1
-        return newDescriptorUniqId(index)
+    fun uniqId(descriptor: DeclarationDescriptor): KonanProtoBuf.DescriptorUniqId? {
+        val index = declarationTable.descriptors[descriptor]
+        return index?.let { newDescriptorUniqId(it) }
     }
 
     override fun serializeType(type: KotlinType, proto: ProtoBuf.Type.Builder) {
@@ -43,17 +40,17 @@ internal class KonanSerializerExtension(val context: Context, override val metad
     }
 
     override fun serializeTypeParameter(typeParameter: TypeParameterDescriptor, proto: ProtoBuf.TypeParameter.Builder) {
-        proto.setExtension(KonanProtoBuf.typeParamUniqId, uniqId(typeParameter))
+        uniqId(typeParameter) ?.let { proto.setExtension(KonanProtoBuf.typeParamUniqId, it) }
         super.serializeTypeParameter(typeParameter, proto)
     }
 
     override fun serializeValueParameter(descriptor: ValueParameterDescriptor, proto: ProtoBuf.ValueParameter.Builder) {
-        proto.setExtension(KonanProtoBuf.valueParamUniqId, uniqId(descriptor))
+        uniqId(descriptor) ?. let { proto.setExtension(KonanProtoBuf.valueParamUniqId, it) }
         super.serializeValueParameter(descriptor, proto)
     }
 
     override fun serializeEnumEntry(descriptor: ClassDescriptor, proto: ProtoBuf.EnumEntry.Builder) {
-        proto.setExtension(KonanProtoBuf.enumEntryUniqId, uniqId(descriptor))
+        uniqId(descriptor) ?.let { proto.setExtension(KonanProtoBuf.enumEntryUniqId, it) }
         // Serialization doesn't preserve enum entry order, so we need to serialize ordinal.
         val ordinal = context.specialDeclarationsFactory.getEnumEntryOrdinal(descriptor)
         proto.setExtension(KonanProtoBuf.enumEntryOrdinal, ordinal)
@@ -61,17 +58,17 @@ internal class KonanSerializerExtension(val context: Context, override val metad
     }
 
     override fun serializeConstructor(descriptor: ConstructorDescriptor, proto: ProtoBuf.Constructor.Builder) {
-        proto.setExtension(KonanProtoBuf.constructorUniqId, uniqId(descriptor))
+        uniqId(descriptor) ?. let { proto.setExtension(KonanProtoBuf.constructorUniqId, it) }
         super.serializeConstructor(descriptor, proto)
     }
 
     override fun serializeClass(descriptor: ClassDescriptor, proto: ProtoBuf.Class.Builder, versionRequirementTable: MutableVersionRequirementTable) {
-        proto.setExtension(KonanProtoBuf.classUniqId, uniqId(descriptor))
+        uniqId(descriptor) ?. let { proto.setExtension(KonanProtoBuf.classUniqId, it) }
         super.serializeClass(descriptor, proto, versionRequirementTable)
     }
 
     override fun serializeFunction(descriptor: FunctionDescriptor, proto: ProtoBuf.Function.Builder) {
-        proto.setExtension(KonanProtoBuf.functionUniqId, uniqId(descriptor))
+        uniqId(descriptor) ?. let { proto.setExtension(KonanProtoBuf.functionUniqId, it) }
         super.serializeFunction(descriptor, proto)
     }
 
@@ -80,7 +77,7 @@ internal class KonanSerializerExtension(val context: Context, override val metad
         if (variable != null) {
             proto.setExtension(KonanProtoBuf.usedAsVariable, true)
         }
-        proto.setExtension(KonanProtoBuf.propertyUniqId, uniqId(descriptor))
+        uniqId(descriptor) ?.let { proto.setExtension(KonanProtoBuf.propertyUniqId, it) }
         proto.setExtension(KonanProtoBuf.hasBackingField,
             context.ir.propertiesWithBackingFields.contains(descriptor))
 

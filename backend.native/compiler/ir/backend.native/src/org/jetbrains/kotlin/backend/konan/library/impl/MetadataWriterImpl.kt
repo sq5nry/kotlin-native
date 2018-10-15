@@ -26,7 +26,7 @@ internal class MetadataWriterImpl(libraryLayout: KonanLibraryLayout): KonanLibra
             }
         }
         linkData.ir!!.declarations.forEach {
-            declarationFile(it.key.toString(16)).writeBytes(it.value)
+            declarationFile(it.key.toULong().toString(16)).writeBytes(it.value)
         }
     }
 }
