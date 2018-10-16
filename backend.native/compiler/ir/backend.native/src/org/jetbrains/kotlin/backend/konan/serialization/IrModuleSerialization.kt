@@ -16,37 +16,33 @@
 
 package org.jetbrains.kotlin.backend.konan.serialization
 
-
-import org.jetbrains.kotlin.protobuf.*
-import org.jetbrains.kotlin.protobuf.CodedInputStream
-import org.jetbrains.kotlin.protobuf.CodedInputStream.*
+import org.jetbrains.kotlin.backend.common.WithLogger
 import org.jetbrains.kotlin.backend.common.ir.ir2string
+import org.jetbrains.kotlin.backend.konan.descriptors.isExpectMember
+import org.jetbrains.kotlin.backend.konan.descriptors.isSerializableExpectClass
+import org.jetbrains.kotlin.backend.konan.irasdescriptors.name
+import org.jetbrains.kotlin.backend.konan.library.SerializedIr
+import org.jetbrains.kotlin.backend.konan.llvm.isExported
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.ClassKind.*
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.SourceManager
 import org.jetbrains.kotlin.ir.declarations.*
-import org.jetbrains.kotlin.ir.declarations.impl.*
+import org.jetbrains.kotlin.ir.declarations.impl.IrFunctionBase
 import org.jetbrains.kotlin.ir.expressions.*
-import org.jetbrains.kotlin.ir.expressions.impl.*
+import org.jetbrains.kotlin.ir.expressions.impl.IrBinaryPrimitiveImpl
+import org.jetbrains.kotlin.ir.expressions.impl.IrGetValueImpl
+import org.jetbrains.kotlin.ir.expressions.impl.IrNullaryPrimitiveImpl
+import org.jetbrains.kotlin.ir.expressions.impl.IrUnaryPrimitiveImpl
 import org.jetbrains.kotlin.ir.symbols.*
 import org.jetbrains.kotlin.ir.types.*
-import org.jetbrains.kotlin.ir.types.impl.*
-//import org.jetbrains.kotlin.ir.util.toKotlinType as utilToKotlinType
+import org.jetbrains.kotlin.ir.types.impl.IrTypeBase
 import org.jetbrains.kotlin.metadata.KonanIr
-import org.jetbrains.kotlin.types.*
-import org.jetbrains.kotlin.backend.common.WithLogger
-import org.jetbrains.kotlin.backend.konan.descriptors.isExpectMember
-import org.jetbrains.kotlin.backend.konan.descriptors.isSerializableExpectClass
-import org.jetbrains.kotlin.backend.konan.irasdescriptors.isReal
-import org.jetbrains.kotlin.backend.konan.irasdescriptors.name
-import org.jetbrains.kotlin.backend.konan.library.SerializedIr
-import org.jetbrains.kotlin.backend.konan.llvm.isExported
-import org.jetbrains.kotlin.resolve.OverridingUtil
 import org.jetbrains.kotlin.resolve.descriptorUtil.classId
+import org.jetbrains.kotlin.types.Variance
 
 internal class IrModuleSerialization(val logger: WithLogger,
-                            val declarationTable: DeclarationTable) {
+                                     val declarationTable: DeclarationTable) {
 
     private val loopIndex = mutableMapOf<IrLoop, Int>()
     private var currentLoopIndex = 0
@@ -108,9 +104,9 @@ internal class IrModuleSerialization(val logger: WithLogger,
         }
 
         val proto = KonanIr.DescriptorReference.newBuilder()
-            .setPackageFqName(packageFqName)
-            .setClassFqName(classFqName)
-            .setName(descriptor.name.toString())
+                .setPackageFqName(packageFqName)
+                .setClassFqName(classFqName)
+                .setName(descriptor.name.toString())
 
         if (index != null) proto.setUniqId(newUniqId(index))
 
@@ -121,7 +117,7 @@ internal class IrModuleSerialization(val logger: WithLogger,
         if (isAccessor) {
             if (declaration.name.asString().startsWith("<get-"))
                 proto.setIsGetter(true)
-            else if(declaration.name.asString().startsWith("<set-"))
+            else if (declaration.name.asString().startsWith("<set-"))
                 proto.setIsSetter(true)
             else
                 error("A property accessor which is neither getter nor setter: $descriptor")
@@ -139,13 +135,13 @@ internal class IrModuleSerialization(val logger: WithLogger,
     fun serializeIrSymbol(symbol: IrSymbol): KonanIr.IrSymbol {
         if (symbol.owner !is IrDeclaration) error("Expected IrDeclaration") // TODO: change symbol to be IrSymbolDeclaration?
 
-        val proto =  KonanIr.IrSymbol.newBuilder()
+        val proto = KonanIr.IrSymbol.newBuilder()
 
-        serializeDescriptorReference(symbol) ?. let {
+        serializeDescriptorReference(symbol)?.let {
             proto.setDescriptorReference(it)
         }
 
-        val kind = when(symbol) {
+        val kind = when (symbol) {
             is IrAnonymousInitializerSymbol ->
                 KonanIr.IrSymbolKind.ANONYMOUS_INIT_SYMBOL
             is IrClassSymbol ->
@@ -178,14 +174,14 @@ internal class IrModuleSerialization(val logger: WithLogger,
 
         println("serializeIrSymbol: index = $index, descriptor = ${symbol.descriptor}, owner = $owner")
 
-        val result =  proto.build()
+        val result = proto.build()
         return result
     }
 
     /* ------- IrTypes ---------------------------------------------------------- */
 
 
-    fun serializeIrTypeVariance(variance: Variance)= when(variance) {
+    fun serializeIrTypeVariance(variance: Variance) = when (variance) {
         Variance.IN_VARIANCE -> KonanIr.IrTypeVariance.IN
         Variance.OUT_VARIANCE -> KonanIr.IrTypeVariance.OUT
         Variance.INVARIANT -> KonanIr.IrTypeVariance.INV
@@ -199,17 +195,16 @@ internal class IrModuleSerialization(val logger: WithLogger,
         return proto.build()
     }
 
-    fun serializeIrTypeBase(type: IrType, kotlinType: KonanIr.KotlinType?): KonanIr.IrTypeBase {
+    fun serializeIrTypeBase(type: IrType): KonanIr.IrTypeBase {
         val typeBase = type as IrTypeBase // TODO: get rid of the cast.
         val proto = KonanIr.IrTypeBase.newBuilder()
-            .setVariance(serializeIrTypeVariance(typeBase.variance))
-            .setAnnotations(serializeAnnotations(typeBase.annotations))
+                .setVariance(serializeIrTypeVariance(typeBase.variance))
+                .setAnnotations(serializeAnnotations(typeBase.annotations))
 
         return proto.build()
     }
 
-    fun serializeIrTypeProjection(argument: IrTypeProjection)
-        = KonanIr.IrTypeProjection.newBuilder()
+    fun serializeIrTypeProjection(argument: IrTypeProjection) = KonanIr.IrTypeProjection.newBuilder()
             .setVariance(serializeIrTypeVariance(argument.variance))
             .setType(serializeIrType(argument.type))
             .build()
@@ -226,11 +221,11 @@ internal class IrModuleSerialization(val logger: WithLogger,
         return proto.build()
     }
 
-    fun serializeSimpleType(type: IrSimpleType, kotlinType: KonanIr.KotlinType?): KonanIr.IrSimpleType {
+    fun serializeSimpleType(type: IrSimpleType): KonanIr.IrSimpleType {
         val proto = KonanIr.IrSimpleType.newBuilder()
-            .setBase(serializeIrTypeBase(type, kotlinType))
-            .setClassifier(serializeIrSymbol(type.classifier))
-            .setHasQuestionMark(type.hasQuestionMark)
+                .setBase(serializeIrTypeBase(type))
+                .setClassifier(serializeIrSymbol(type.classifier))
+                .setHasQuestionMark(type.hasQuestionMark)
         type.arguments.forEach {
             proto.addArgument(serializeTypeArgument(it))
         }
@@ -238,20 +233,19 @@ internal class IrModuleSerialization(val logger: WithLogger,
     }
 
     fun serializeDynamicType(type: IrDynamicType) = KonanIr.IrDynamicType.newBuilder()
-        .setBase(serializeIrTypeBase(type, null))
-        .build()
+            .setBase(serializeIrTypeBase(type))
+            .build()
 
-    fun serializeErrorType(type: IrErrorType)  = KonanIr.IrErrorType.newBuilder()
-        .setBase(serializeIrTypeBase(type, null))
-        .build()
+    fun serializeErrorType(type: IrErrorType) = KonanIr.IrErrorType.newBuilder()
+            .setBase(serializeIrTypeBase(type))
+            .build()
 
-    private fun serializeIrType(type: IrType) : KonanIr.IrType {
-        logger.log{"### serializing IrType: " + type}
-        val kotlinType = null
+    private fun serializeIrType(type: IrType): KonanIr.IrType {
+        logger.log { "### serializing IrType: " + type }
         val proto = KonanIr.IrType.newBuilder()
         when (type) {
             is IrSimpleType ->
-                proto.simple = serializeSimpleType(type, kotlinType)
+                proto.simple = serializeSimpleType(type)
             is IrDynamicType ->
                 proto.dynamic = serializeDynamicType(type)
             is IrErrorType ->
@@ -281,11 +275,11 @@ internal class IrModuleSerialization(val logger: WithLogger,
     }
 
     private fun serializeBlock(block: IrBlock): KonanIr.IrBlock {
-        val isLambdaOrigin = 
-            block.origin == IrStatementOrigin.LAMBDA ||
-            block.origin == IrStatementOrigin.ANONYMOUS_FUNCTION
+        val isLambdaOrigin =
+                block.origin == IrStatementOrigin.LAMBDA ||
+                        block.origin == IrStatementOrigin.ANONYMOUS_FUNCTION
         val proto = KonanIr.IrBlock.newBuilder()
-            .setIsLambdaOrigin(isLambdaOrigin)
+                .setIsLambdaOrigin(isLambdaOrigin)
         block.statements.forEach {
             proto.addStatement(serializeStatement(it))
         }
@@ -302,8 +296,8 @@ internal class IrModuleSerialization(val logger: WithLogger,
 
     private fun serializeCatch(catch: IrCatch): KonanIr.IrCatch {
         val proto = KonanIr.IrCatch.newBuilder()
-           .setCatchParameter(serializeDeclaration(catch.catchParameter))
-           .setResult(serializeExpression(catch.result))
+                .setCatchParameter(serializeDeclaration(catch.catchParameter))
+                .setResult(serializeExpression(catch.result))
         return proto.build()
     }
 
@@ -316,14 +310,14 @@ internal class IrModuleSerialization(val logger: WithLogger,
     }
 
     private fun irCallToPrimitiveKind(call: IrCall): KonanIr.IrCall.Primitive = when (call) {
-        is IrNullaryPrimitiveImpl 
-            -> KonanIr.IrCall.Primitive.NULLARY
-        is IrUnaryPrimitiveImpl 
-            -> KonanIr.IrCall.Primitive.UNARY
-        is IrBinaryPrimitiveImpl 
-            -> KonanIr.IrCall.Primitive.BINARY
+        is IrNullaryPrimitiveImpl
+        -> KonanIr.IrCall.Primitive.NULLARY
+        is IrUnaryPrimitiveImpl
+        -> KonanIr.IrCall.Primitive.UNARY
+        is IrBinaryPrimitiveImpl
+        -> KonanIr.IrCall.Primitive.BINARY
         else
-            -> KonanIr.IrCall.Primitive.NOT_PRIMITIVE
+        -> KonanIr.IrCall.Primitive.NOT_PRIMITIVE
     }
 
     private fun serializeMemberAccessCommon(call: IrMemberAccessExpression): KonanIr.MemberAccessCommon {
@@ -332,12 +326,12 @@ internal class IrModuleSerialization(val logger: WithLogger,
             proto.extensionReceiver = serializeExpression(call.extensionReceiver!!)
         }
 
-        if (call.dispatchReceiver != null)  {
+        if (call.dispatchReceiver != null) {
             proto.dispatchReceiver = serializeExpression(call.dispatchReceiver!!)
         }
         proto.typeArguments = serializeTypeArguments(call)
 
-        for (index in 0 .. call.valueArgumentsCount-1) {
+        for (index in 0..call.valueArgumentsCount - 1) {
             val actual = call.getValueArgument(index)
             val argOrNull = KonanIr.NullableIrExpression.newBuilder()
             if (actual == null) {
@@ -361,7 +355,7 @@ internal class IrModuleSerialization(val logger: WithLogger,
         proto.kind = irCallToPrimitiveKind(call)
         proto.symbol = serializeIrSymbol(call.symbol)
 
-        call.superQualifierSymbol ?. let {
+        call.superQualifierSymbol?.let {
             proto.`super` = serializeIrSymbol(it)
         }
         proto.memberAccess = serializeMemberAccessCommon(call)
@@ -370,9 +364,9 @@ internal class IrModuleSerialization(val logger: WithLogger,
 
     private fun serializeFunctionReference(callable: IrFunctionReference): KonanIr.IrFunctionReference {
         val proto = KonanIr.IrFunctionReference.newBuilder()
-            .setSymbol(serializeIrSymbol(callable.symbol))
-            .setTypeArguments(serializeTypeArguments(callable))
-            .setValueArgumentsCount(callable.descriptor.valueParameters.size)
+                .setSymbol(serializeIrSymbol(callable.symbol))
+                .setTypeArguments(serializeTypeArguments(callable))
+                .setValueArgumentsCount(callable.descriptor.valueParameters.size)
         callable.origin?.let { proto.origin = (it as IrStatementOriginImpl).debugName }
         return proto.build()
     }
@@ -390,65 +384,65 @@ internal class IrModuleSerialization(val logger: WithLogger,
 
     private fun serializeClassReference(expression: IrClassReference): KonanIr.IrClassReference {
         val proto = KonanIr.IrClassReference.newBuilder()
-            .setClassSymbol(serializeIrSymbol(expression.symbol))
-            .setType(serializeIrType(expression.type))
+                .setClassSymbol(serializeIrSymbol(expression.symbol))
+                .setType(serializeIrType(expression.type))
         return proto.build()
     }
 
     private fun serializeConst(value: IrConst<*>): KonanIr.IrConst {
         val proto = KonanIr.IrConst.newBuilder()
         when (value.kind) {
-            IrConstKind.Null        -> proto.`null` = true
-            IrConstKind.Boolean     -> proto.boolean = value.value as Boolean
-            IrConstKind.Byte        -> proto.byte = (value.value as Byte).toInt()
-            IrConstKind.Char        -> proto.char = (value.value as Char).toInt()
-            IrConstKind.Short       -> proto.short = (value.value as Short).toInt()
-            IrConstKind.Int         -> proto.int = value.value as Int
-            IrConstKind.Long        -> proto.long = value.value as Long
-            IrConstKind.String      -> proto.string = value.value as String
-            IrConstKind.Float       -> proto.float = value.value as Float
-            IrConstKind.Double      -> proto.double = value.value as Double
-         }
+            IrConstKind.Null -> proto.`null` = true
+            IrConstKind.Boolean -> proto.boolean = value.value as Boolean
+            IrConstKind.Byte -> proto.byte = (value.value as Byte).toInt()
+            IrConstKind.Char -> proto.char = (value.value as Char).toInt()
+            IrConstKind.Short -> proto.short = (value.value as Short).toInt()
+            IrConstKind.Int -> proto.int = value.value as Int
+            IrConstKind.Long -> proto.long = value.value as Long
+            IrConstKind.String -> proto.string = value.value as String
+            IrConstKind.Float -> proto.float = value.value as Float
+            IrConstKind.Double -> proto.double = value.value as Double
+        }
         return proto.build()
     }
 
     private fun serializeDelegatingConstructorCall(call: IrDelegatingConstructorCall): KonanIr.IrDelegatingConstructorCall {
         val proto = KonanIr.IrDelegatingConstructorCall.newBuilder()
-            .setSymbol(serializeIrSymbol(call.symbol))
-            .setMemberAccess(serializeMemberAccessCommon(call))
+                .setSymbol(serializeIrSymbol(call.symbol))
+                .setMemberAccess(serializeMemberAccessCommon(call))
         return proto.build()
     }
 
     private fun serializeDoWhile(expression: IrDoWhileLoop): KonanIr.IrDoWhile {
         val proto = KonanIr.IrDoWhile.newBuilder()
-            .setLoop(serializeLoop(expression))
+                .setLoop(serializeLoop(expression))
 
         return proto.build()
     }
 
     fun serializeEnumConstructorCall(call: IrEnumConstructorCall): KonanIr.IrEnumConstructorCall {
         val proto = KonanIr.IrEnumConstructorCall.newBuilder()
-            .setSymbol(serializeIrSymbol(call.symbol))
-            .setMemberAccess(serializeMemberAccessCommon(call))
+                .setSymbol(serializeIrSymbol(call.symbol))
+                .setMemberAccess(serializeMemberAccessCommon(call))
         return proto.build()
     }
 
     private fun serializeGetClass(expression: IrGetClass): KonanIr.IrGetClass {
         val proto = KonanIr.IrGetClass.newBuilder()
-            .setArgument(serializeExpression(expression.argument))
+                .setArgument(serializeExpression(expression.argument))
         return proto.build()
     }
 
     private fun serializeGetEnumValue(expression: IrGetEnumValue): KonanIr.IrGetEnumValue {
         val proto = KonanIr.IrGetEnumValue.newBuilder()
-            .setType(serializeIrType(expression.type))
-            .setSymbol(serializeIrSymbol(expression.symbol))
+                .setType(serializeIrType(expression.type))
+                .setSymbol(serializeIrSymbol(expression.symbol))
         return proto.build()
     }
 
     private fun serializeFieldAccessCommon(expression: IrFieldAccessExpression): KonanIr.FieldAccessCommon {
         val proto = KonanIr.FieldAccessCommon.newBuilder()
-            .setSymbol(serializeIrSymbol(expression.symbol))
+                .setSymbol(serializeIrSymbol(expression.symbol))
         expression.superQualifierSymbol?.let { proto.`super` = serializeIrSymbol(it) }
         expression.receiver?.let { proto.receiver = serializeExpression(it) }
         return proto.build()
@@ -456,22 +450,22 @@ internal class IrModuleSerialization(val logger: WithLogger,
 
     private fun serializeGetField(expression: IrGetField): KonanIr.IrGetField {
         val proto = KonanIr.IrGetField.newBuilder()
-            .setFieldAccess(serializeFieldAccessCommon(expression))
-            .setType(serializeIrType(expression.type))
+                .setFieldAccess(serializeFieldAccessCommon(expression))
+                .setType(serializeIrType(expression.type))
         return proto.build()
     }
 
     private fun serializeGetValue(expression: IrGetValue): KonanIr.IrGetValue {
         val type = (expression as IrGetValueImpl).type
         val proto = KonanIr.IrGetValue.newBuilder()
-            .setSymbol(serializeIrSymbol(expression.symbol))
-            .setType(serializeIrType(type))
+                .setSymbol(serializeIrSymbol(expression.symbol))
+                .setType(serializeIrType(type))
         return proto.build()
     }
 
     private fun serializeGetObject(expression: IrGetObjectValue): KonanIr.IrGetObject {
         val proto = KonanIr.IrGetObject.newBuilder()
-            .setSymbol(serializeIrSymbol(expression.symbol))
+                .setSymbol(serializeIrSymbol(expression.symbol))
         return proto.build()
     }
 
@@ -485,51 +479,50 @@ internal class IrModuleSerialization(val logger: WithLogger,
 
     private fun serializeReturn(expression: IrReturn): KonanIr.IrReturn {
         val proto = KonanIr.IrReturn.newBuilder()
-            .setReturnTarget(serializeIrSymbol(expression.returnTargetSymbol))
-            .setValue(serializeExpression(expression.value))
+                .setReturnTarget(serializeIrSymbol(expression.returnTargetSymbol))
+                .setValue(serializeExpression(expression.value))
         return proto.build()
     }
 
     private fun serializeSetField(expression: IrSetField): KonanIr.IrSetField {
         val proto = KonanIr.IrSetField.newBuilder()
-            .setFieldAccess(serializeFieldAccessCommon(expression))
-            .setValue(serializeExpression(expression.value))
+                .setFieldAccess(serializeFieldAccessCommon(expression))
+                .setValue(serializeExpression(expression.value))
         return proto.build()
     }
 
     private fun serializeSetVariable(expression: IrSetVariable): KonanIr.IrSetVariable {
         val proto = KonanIr.IrSetVariable.newBuilder()
-            .setSymbol(serializeIrSymbol(expression.symbol))
-            .setValue(serializeExpression(expression.value))
+                .setSymbol(serializeIrSymbol(expression.symbol))
+                .setValue(serializeExpression(expression.value))
         return proto.build()
     }
 
     private fun serializeSpreadElement(element: IrSpreadElement): KonanIr.IrSpreadElement {
         val coordinates = serializeCoordinates(element.startOffset, element.endOffset)
         return KonanIr.IrSpreadElement.newBuilder()
-            .setExpression(serializeExpression(element.expression))
-            .setCoordinates(coordinates)
-            .build()
+                .setExpression(serializeExpression(element.expression))
+                .setCoordinates(coordinates)
+                .build()
     }
 
-    private fun serializeSyntheticBody(expression: IrSyntheticBody)
-            = KonanIr.IrSyntheticBody.newBuilder()
-                .setKind(when(expression.kind) {
-                    IrSyntheticBodyKind.ENUM_VALUES -> KonanIr.IrSyntheticBodyKind.ENUM_VALUES
-                    IrSyntheticBodyKind.ENUM_VALUEOF -> KonanIr.IrSyntheticBodyKind.ENUM_VALUEOF
-                }
+    private fun serializeSyntheticBody(expression: IrSyntheticBody) = KonanIr.IrSyntheticBody.newBuilder()
+            .setKind(when (expression.kind) {
+                IrSyntheticBodyKind.ENUM_VALUES -> KonanIr.IrSyntheticBodyKind.ENUM_VALUES
+                IrSyntheticBodyKind.ENUM_VALUEOF -> KonanIr.IrSyntheticBodyKind.ENUM_VALUEOF
+            }
             )
             .build()
 
     private fun serializeThrow(expression: IrThrow): KonanIr.IrThrow {
         val proto = KonanIr.IrThrow.newBuilder()
-            .setValue(serializeExpression(expression.value))
+                .setValue(serializeExpression(expression.value))
         return proto.build()
     }
 
     private fun serializeTry(expression: IrTry): KonanIr.IrTry {
         val proto = KonanIr.IrTry.newBuilder()
-            .setResult(serializeExpression(expression.tryResult))
+                .setResult(serializeExpression(expression.tryResult))
         val catchList = expression.catches
         catchList.forEach {
             proto.addCatch(serializeStatement(it))
@@ -543,35 +536,35 @@ internal class IrModuleSerialization(val logger: WithLogger,
 
     private fun serializeTypeOperator(operator: IrTypeOperator): KonanIr.IrTypeOperator = when (operator) {
         IrTypeOperator.CAST
-            -> KonanIr.IrTypeOperator.CAST
+        -> KonanIr.IrTypeOperator.CAST
         IrTypeOperator.IMPLICIT_CAST
-            -> KonanIr.IrTypeOperator.IMPLICIT_CAST
+        -> KonanIr.IrTypeOperator.IMPLICIT_CAST
         IrTypeOperator.IMPLICIT_NOTNULL
-            -> KonanIr.IrTypeOperator.IMPLICIT_NOTNULL
+        -> KonanIr.IrTypeOperator.IMPLICIT_NOTNULL
         IrTypeOperator.IMPLICIT_COERCION_TO_UNIT
-            -> KonanIr.IrTypeOperator.IMPLICIT_COERCION_TO_UNIT
+        -> KonanIr.IrTypeOperator.IMPLICIT_COERCION_TO_UNIT
         IrTypeOperator.IMPLICIT_INTEGER_COERCION
-            -> KonanIr.IrTypeOperator.IMPLICIT_INTEGER_COERCION
+        -> KonanIr.IrTypeOperator.IMPLICIT_INTEGER_COERCION
         IrTypeOperator.SAFE_CAST
-            -> KonanIr.IrTypeOperator.SAFE_CAST
+        -> KonanIr.IrTypeOperator.SAFE_CAST
         IrTypeOperator.INSTANCEOF
-            -> KonanIr.IrTypeOperator.INSTANCEOF
+        -> KonanIr.IrTypeOperator.INSTANCEOF
         IrTypeOperator.NOT_INSTANCEOF
-            -> KonanIr.IrTypeOperator.NOT_INSTANCEOF
+        -> KonanIr.IrTypeOperator.NOT_INSTANCEOF
     }
 
     private fun serializeTypeOp(expression: IrTypeOperatorCall): KonanIr.IrTypeOp {
         val proto = KonanIr.IrTypeOp.newBuilder()
-            .setOperator(serializeTypeOperator(expression.operator))
-            .setOperand(serializeIrType(expression.typeOperand))
-            .setArgument(serializeExpression(expression.argument))
+                .setOperator(serializeTypeOperator(expression.operator))
+                .setOperand(serializeIrType(expression.typeOperand))
+                .setArgument(serializeExpression(expression.argument))
         return proto.build()
 
     }
 
     private fun serializeVararg(expression: IrVararg): KonanIr.IrVararg {
         val proto = KonanIr.IrVararg.newBuilder()
-            .setElementType(serializeIrType(expression.varargElementType))
+                .setElementType(serializeIrType(expression.varargElementType))
         expression.elements.forEach {
             proto.addElement(serializeVarargElement(it))
         }
@@ -582,9 +575,9 @@ internal class IrModuleSerialization(val logger: WithLogger,
         val proto = KonanIr.IrVarargElement.newBuilder()
         when (element) {
             is IrExpression
-                -> proto.expression = serializeExpression(element)
+            -> proto.expression = serializeExpression(element)
             is IrSpreadElement
-                -> proto.spreadElement = serializeSpreadElement(element)
+            -> proto.spreadElement = serializeSpreadElement(element)
             else -> error("Unknown vararg element kind")
         }
         return proto.build()
@@ -603,7 +596,7 @@ internal class IrModuleSerialization(val logger: WithLogger,
 
     private fun serializeLoop(expression: IrLoop): KonanIr.Loop {
         val proto = KonanIr.Loop.newBuilder()
-            .setCondition(serializeExpression(expression.condition))
+                .setCondition(serializeExpression(expression.condition))
         val label = expression.label
         if (label != null) {
             proto.label = label
@@ -622,7 +615,7 @@ internal class IrModuleSerialization(val logger: WithLogger,
 
     private fun serializeWhile(expression: IrWhileLoop): KonanIr.IrWhile {
         val proto = KonanIr.IrWhile.newBuilder()
-            .setLoop(serializeLoop(expression))
+                .setLoop(serializeLoop(expression))
 
         return proto.build()
     }
@@ -652,55 +645,55 @@ internal class IrModuleSerialization(val logger: WithLogger,
     }
 
     private fun serializeExpression(expression: IrExpression): KonanIr.IrExpression {
-        logger.log{"### serializing Expression: ${ir2string(expression)}"}
+        logger.log { "### serializing Expression: ${ir2string(expression)}" }
 
         val coordinates = serializeCoordinates(expression.startOffset, expression.endOffset)
         val proto = KonanIr.IrExpression.newBuilder()
-            .setType(serializeIrType(expression.type))
-            .setCoordinates(coordinates)
+                .setType(serializeIrType(expression.type))
+                .setCoordinates(coordinates)
 
         val operationProto = KonanIr.IrOperation.newBuilder()
-        
-        when (expression) {
-            is IrBlock       -> operationProto.block = serializeBlock(expression)
-            is IrBreak       -> operationProto.`break` = serializeBreak(expression)
-            is IrClassReference
-                             -> operationProto.classReference = serializeClassReference(expression)
-            is IrCall        -> operationProto.call = serializeCall(expression)
 
-            is IrComposite   -> operationProto.composite = serializeComposite(expression)
-            is IrConst<*>    -> operationProto.const = serializeConst(expression)
-            is IrContinue    -> operationProto.`continue` = serializeContinue(expression)
+        when (expression) {
+            is IrBlock -> operationProto.block = serializeBlock(expression)
+            is IrBreak -> operationProto.`break` = serializeBreak(expression)
+            is IrClassReference
+            -> operationProto.classReference = serializeClassReference(expression)
+            is IrCall -> operationProto.call = serializeCall(expression)
+
+            is IrComposite -> operationProto.composite = serializeComposite(expression)
+            is IrConst<*> -> operationProto.const = serializeConst(expression)
+            is IrContinue -> operationProto.`continue` = serializeContinue(expression)
             is IrDelegatingConstructorCall
-                             -> operationProto.delegatingConstructorCall = serializeDelegatingConstructorCall(expression)
+            -> operationProto.delegatingConstructorCall = serializeDelegatingConstructorCall(expression)
             is IrDoWhileLoop -> operationProto.doWhile = serializeDoWhile(expression)
             is IrEnumConstructorCall
-                             -> operationProto.enumConstructorCall = serializeEnumConstructorCall(expression)
+            -> operationProto.enumConstructorCall = serializeEnumConstructorCall(expression)
             is IrFunctionReference
-                             -> operationProto.functionReference = serializeFunctionReference(expression)
-            is IrGetClass    -> operationProto.getClass = serializeGetClass(expression)
-            is IrGetField    -> operationProto.getField = serializeGetField(expression)
-            is IrGetValue    -> operationProto.getValue = serializeGetValue(expression)
-            is IrGetEnumValue    
-                             -> operationProto.getEnumValue = serializeGetEnumValue(expression)
-            is IrGetObjectValue    
-                             -> operationProto.getObject = serializeGetObject(expression)
-            is IrInstanceInitializerCall        
-                             -> operationProto.instanceInitializerCall = serializeInstanceInitializerCall(expression)
+            -> operationProto.functionReference = serializeFunctionReference(expression)
+            is IrGetClass -> operationProto.getClass = serializeGetClass(expression)
+            is IrGetField -> operationProto.getField = serializeGetField(expression)
+            is IrGetValue -> operationProto.getValue = serializeGetValue(expression)
+            is IrGetEnumValue
+            -> operationProto.getEnumValue = serializeGetEnumValue(expression)
+            is IrGetObjectValue
+            -> operationProto.getObject = serializeGetObject(expression)
+            is IrInstanceInitializerCall
+            -> operationProto.instanceInitializerCall = serializeInstanceInitializerCall(expression)
             is IrPropertyReference
-                             -> operationProto.propertyReference = serializePropertyReference(expression)
-            is IrReturn      -> operationProto.`return` = serializeReturn(expression)
-            is IrSetField    -> operationProto.setField = serializeSetField(expression)
+            -> operationProto.propertyReference = serializePropertyReference(expression)
+            is IrReturn -> operationProto.`return` = serializeReturn(expression)
+            is IrSetField -> operationProto.setField = serializeSetField(expression)
             is IrSetVariable -> operationProto.setVariable = serializeSetVariable(expression)
-            is IrStringConcatenation 
-                             -> operationProto.stringConcat = serializeStringConcat(expression)
-            is IrThrow       -> operationProto.`throw` = serializeThrow(expression)
-            is IrTry         -> operationProto.`try` = serializeTry(expression)
-            is IrTypeOperatorCall 
-                             -> operationProto.typeOp = serializeTypeOp(expression)
-            is IrVararg      -> operationProto.vararg = serializeVararg(expression)
-            is IrWhen        -> operationProto.`when` = serializeWhen(expression)
-            is IrWhileLoop   -> operationProto.`while` = serializeWhile(expression)
+            is IrStringConcatenation
+            -> operationProto.stringConcat = serializeStringConcat(expression)
+            is IrThrow -> operationProto.`throw` = serializeThrow(expression)
+            is IrTry -> operationProto.`try` = serializeTry(expression)
+            is IrTypeOperatorCall
+            -> operationProto.typeOp = serializeTypeOp(expression)
+            is IrVararg -> operationProto.vararg = serializeVararg(expression)
+            is IrWhen -> operationProto.`when` = serializeWhen(expression)
+            is IrWhileLoop -> operationProto.`while` = serializeWhile(expression)
             else -> {
                 TODO("Expression serialization not implemented yet: ${ir2string(expression)}.")
             }
@@ -711,19 +704,31 @@ internal class IrModuleSerialization(val logger: WithLogger,
     }
 
     private fun serializeStatement(statement: IrElement): KonanIr.IrStatement {
-        logger.log{"### serializing Statement: ${ir2string(statement)}"}
+        logger.log { "### serializing Statement: ${ir2string(statement)}" }
 
         val coordinates = serializeCoordinates(statement.startOffset, statement.endOffset)
         val proto = KonanIr.IrStatement.newBuilder()
-            .setCoordinates(coordinates)
+                .setCoordinates(coordinates)
 
         when (statement) {
-            is IrDeclaration -> { logger.log{" ###Declaration "}; proto.declaration = serializeDeclaration(statement) }
-            is IrExpression -> { logger.log{" ###Expression "}; proto.expression = serializeExpression(statement) }
-            is IrBlockBody -> { logger.log{" ###BlockBody "}; proto.blockBody = serializeBlockBody(statement) }
-            is IrBranch    -> { logger.log{" ###Branch "}; proto.branch = serializeBranch(statement) }
-            is IrCatch    -> { logger.log{" ###Catch "}; proto.catch = serializeCatch(statement) }
-            is IrSyntheticBody -> { logger.log{" ###SyntheticBody "}; proto.syntheticBody = serializeSyntheticBody(statement) }
+            is IrDeclaration -> {
+                logger.log { " ###Declaration " }; proto.declaration = serializeDeclaration(statement)
+            }
+            is IrExpression -> {
+                logger.log { " ###Expression " }; proto.expression = serializeExpression(statement)
+            }
+            is IrBlockBody -> {
+                logger.log { " ###BlockBody " }; proto.blockBody = serializeBlockBody(statement)
+            }
+            is IrBranch -> {
+                logger.log { " ###Branch " }; proto.branch = serializeBranch(statement)
+            }
+            is IrCatch -> {
+                logger.log { " ###Catch " }; proto.catch = serializeCatch(statement)
+            }
+            is IrSyntheticBody -> {
+                logger.log { " ###SyntheticBody " }; proto.syntheticBody = serializeSyntheticBody(statement)
+            }
             else -> {
                 TODO("Statement not implemented yet: ${ir2string(statement)}")
             }
@@ -742,14 +747,14 @@ internal class IrModuleSerialization(val logger: WithLogger,
                 .setIsCrossinline(parameter.isCrossinline)
                 .setIsNoinline(parameter.isNoinline)
 
-        parameter.varargElementType ?. let { proto.setVarargElementType(serializeIrType(it))}
-        parameter.defaultValue ?. let { proto.setDefaultValue(serializeExpression(it.expression)) }
+        parameter.varargElementType?.let { proto.setVarargElementType(serializeIrType(it)) }
+        parameter.defaultValue?.let { proto.setDefaultValue(serializeExpression(it.expression)) }
 
         return proto.build()
     }
 
     private fun serializeIrTypeParameter(parameter: IrTypeParameter): KonanIr.IrTypeParameter {
-        val proto =  KonanIr.IrTypeParameter.newBuilder()
+        val proto = KonanIr.IrTypeParameter.newBuilder()
                 .setSymbol(serializeIrSymbol(parameter.symbol))
                 .setName(parameter.name.toString())
                 .setIndex(parameter.index)
@@ -771,12 +776,12 @@ internal class IrModuleSerialization(val logger: WithLogger,
 
     private fun serializeIrFunctionBase(function: IrFunctionBase): KonanIr.IrFunctionBase {
         val proto = KonanIr.IrFunctionBase.newBuilder()
-            .setName(function.name.toString())
-            .setVisibility(function.visibility.name)
-            .setIsInline(function.isInline)
-            .setIsExternal(function.isExternal)
-            .setReturnType(serializeIrType(function.returnType))
-            .setTypeParameters(serializeIrTypeParameterContainer(function.typeParameters))
+                .setName(function.name.toString())
+                .setVisibility(function.visibility.name)
+                .setIsInline(function.isInline)
+                .setIsExternal(function.isExternal)
+                .setReturnType(serializeIrType(function.returnType))
+                .setTypeParameters(serializeIrTypeParameterContainer(function.typeParameters))
 
         function.dispatchReceiverParameter?.let { proto.setDispatchReceiver(serializeIrValueParameter(it)) }
         function.extensionReceiverParameter?.let { proto.setExtensionReceiver(serializeIrValueParameter(it)) }
@@ -796,26 +801,26 @@ internal class IrModuleSerialization(val logger: WithLogger,
 
     private fun serializeIrConstructor(declaration: IrConstructor): KonanIr.IrConstructor {
         return KonanIr.IrConstructor.newBuilder()
-            .setSymbol(serializeIrSymbol(declaration.symbol))
-            .setBase(serializeIrFunctionBase(declaration as IrFunctionBase))
-            .setIsPrimary(declaration.isPrimary)
-            .build()
+                .setSymbol(serializeIrSymbol(declaration.symbol))
+                .setBase(serializeIrFunctionBase(declaration as IrFunctionBase))
+                .setIsPrimary(declaration.isPrimary)
+                .build()
     }
 
     private fun serializeIrFunction(declaration: IrSimpleFunction): KonanIr.IrFunction {
         val function = declaration// as IrFunctionImpl
         val proto = KonanIr.IrFunction.newBuilder()
-            .setSymbol(serializeIrSymbol(function.symbol))
-            .setModality(serializeModality(function.modality))
-            .setIsTailrec(function.isTailrec)
-            .setIsSuspend(function.isSuspend)
+                .setSymbol(serializeIrSymbol(function.symbol))
+                .setModality(serializeModality(function.modality))
+                .setIsTailrec(function.isTailrec)
+                .setIsSuspend(function.isSuspend)
 
         function.overriddenSymbols.forEach {
             proto.addOverridden(serializeIrSymbol(it))
         }
 
         // TODO!!!
-        function.correspondingProperty ?. let {
+        function.correspondingProperty?.let {
             val index = declarationTable.indexByValue(it)
             proto.setCorrespondingProperty(newUniqId(index))
         }
@@ -826,8 +831,7 @@ internal class IrModuleSerialization(val logger: WithLogger,
         return proto.build()
     }
 
-    private fun serializeIrAnonymousInit(declaration: IrAnonymousInitializer)
-        = KonanIr.IrAnonymousInit.newBuilder()
+    private fun serializeIrAnonymousInit(declaration: IrAnonymousInitializer) = KonanIr.IrAnonymousInit.newBuilder()
             .setSymbol(serializeIrSymbol(declaration.symbol))
             .setBody(serializeStatement(declaration.body))
             .build()
@@ -841,16 +845,16 @@ internal class IrModuleSerialization(val logger: WithLogger,
 
 
         val proto = KonanIr.IrProperty.newBuilder()
-            .setIsDelegated(property.isDelegated)
-            .setDeclaration(newUniqId(index))
-            .setName(property.name.toString())
-            .setVisibility(serializeVisibility(property.visibility))
-            .setModality(serializeModality(property.modality))
-            .setIsVar(property.isVar)
-            .setIsConst(property.isConst)
-            .setIsLateinit(property.isLateinit)
-            .setIsDelegated(property.isDelegated)
-            .setIsExternal(property.isExternal)
+                .setIsDelegated(property.isDelegated)
+                .setDeclaration(newUniqId(index))
+                .setName(property.name.toString())
+                .setVisibility(serializeVisibility(property.visibility))
+                .setModality(serializeModality(property.modality))
+                .setIsVar(property.isVar)
+                .setIsConst(property.isConst)
+                .setIsLateinit(property.isLateinit)
+                .setIsDelegated(property.isDelegated)
+                .setIsExternal(property.isExternal)
 
         val backingField = property.backingField
         val getter = property.getter
@@ -867,13 +871,13 @@ internal class IrModuleSerialization(val logger: WithLogger,
 
     private fun serializeIrField(field: IrField): KonanIr.IrField {
         val proto = KonanIr.IrField.newBuilder()
-            .setSymbol(serializeIrSymbol(field.symbol))
-            .setName(field.name.toString())
-            .setVisibility(field.visibility.displayName)
-            .setIsFinal(field.isFinal)
-            .setIsExternal(field.isExternal)
-            .setIsStatic(field.isStatic)
-            .setType(serializeIrType(field.type))
+                .setSymbol(serializeIrSymbol(field.symbol))
+                .setName(field.name.toString())
+                .setVisibility(field.visibility.displayName)
+                .setIsFinal(field.isFinal)
+                .setIsExternal(field.isExternal)
+                .setIsStatic(field.isStatic)
+                .setType(serializeIrType(field.type))
         val initializer = field.initializer?.expression
         if (initializer != null) {
             proto.initializer = serializeExpression(initializer)
@@ -883,13 +887,13 @@ internal class IrModuleSerialization(val logger: WithLogger,
 
     private fun serializeIrVariable(variable: IrVariable): KonanIr.IrVariable {
         val proto = KonanIr.IrVariable.newBuilder()
-            .setSymbol(serializeIrSymbol(variable.symbol))
-            .setName(variable.name.toString())
-            .setType(serializeIrType(variable.type))
-            .setIsConst(variable.isConst)
-            .setIsVar(variable.isVar)
-            .setIsLateinit(variable.isLateinit)
-        variable.initializer ?. let { proto.initializer = serializeExpression(it) }
+                .setSymbol(serializeIrSymbol(variable.symbol))
+                .setName(variable.name.toString())
+                .setType(serializeIrType(variable.type))
+                .setIsConst(variable.isConst)
+                .setIsVar(variable.isVar)
+                .setIsLateinit(variable.isLateinit)
+        variable.initializer?.let { proto.initializer = serializeExpression(it) }
         return proto.build()
     }
 
@@ -902,7 +906,7 @@ internal class IrModuleSerialization(val logger: WithLogger,
         return proto.build()
     }
 
-    private fun serializeClassKind(kind: ClassKind) = when(kind) {
+    private fun serializeClassKind(kind: ClassKind) = when (kind) {
         CLASS -> KonanIr.ClassKind.CLASS
         INTERFACE -> KonanIr.ClassKind.INTERFACE
         ENUM_CLASS -> KonanIr.ClassKind.ENUM_CLASS
@@ -936,8 +940,8 @@ internal class IrModuleSerialization(val logger: WithLogger,
 
     private fun serializeIrEnumEntry(enumEntry: IrEnumEntry): KonanIr.IrEnumEntry {
         val proto = KonanIr.IrEnumEntry.newBuilder()
-            .setName(enumEntry.name.toString())
-            .setSymbol(serializeIrSymbol(enumEntry.symbol))
+                .setName(enumEntry.name.toString())
+                .setSymbol(serializeIrSymbol(enumEntry.symbol))
 
         enumEntry.initializerExpression?.let {
             proto.initializer = serializeExpression(it)
@@ -953,40 +957,40 @@ internal class IrModuleSerialization(val logger: WithLogger,
                     .setName((origin as IrDeclarationOriginImpl).name)
 
     private fun serializeDeclaration(declaration: IrDeclaration): KonanIr.IrDeclaration {
-        logger.log{"### serializing Declaration: ${ir2string(declaration)}"}
+        logger.log { "### serializing Declaration: ${ir2string(declaration)}" }
 
         val declarator = KonanIr.IrDeclarator.newBuilder()
 
         when (declaration) {
             is IrTypeAlias
-               -> declarator.irTypeAlias = serializeIrTypeAlias(declaration)
+            -> declarator.irTypeAlias = serializeIrTypeAlias(declaration)
             is IrAnonymousInitializer
-                -> declarator.irAnonymousInit = serializeIrAnonymousInit(declaration)
+            -> declarator.irAnonymousInit = serializeIrAnonymousInit(declaration)
             is IrConstructor
-                -> declarator.irConstructor = serializeIrConstructor(declaration)
+            -> declarator.irConstructor = serializeIrConstructor(declaration)
             is IrField
-                -> declarator.irField = serializeIrField(declaration)
+            -> declarator.irField = serializeIrField(declaration)
             is IrSimpleFunction
-                -> declarator.irFunction = serializeIrFunction(declaration)
-            is IrVariable 
-                -> declarator.irVariable = serializeIrVariable(declaration)
+            -> declarator.irFunction = serializeIrFunction(declaration)
+            is IrVariable
+            -> declarator.irVariable = serializeIrVariable(declaration)
             is IrClass
-                -> declarator.irClass = serializeIrClass(declaration)
+            -> declarator.irClass = serializeIrClass(declaration)
             is IrEnumEntry
-                -> declarator.irEnumEntry = serializeIrEnumEntry(declaration)
+            -> declarator.irEnumEntry = serializeIrEnumEntry(declaration)
             is IrProperty
-                -> declarator.irProperty = serializeIrProperty(declaration)
+            -> declarator.irProperty = serializeIrProperty(declaration)
             else
-                -> TODO("Declaration serialization not supported yet: $declaration")
+            -> TODO("Declaration serialization not supported yet: $declaration")
         }
 
         val coordinates = serializeCoordinates(declaration.startOffset, declaration.endOffset)
         val annotations = serializeAnnotations(declaration.annotations)
         val origin = serializeIrDeclarationOrigin(declaration.origin)
         val proto = KonanIr.IrDeclaration.newBuilder()
-            .setCoordinates(coordinates)
-            .setAnnotations(annotations)
-            .setOrigin(origin)
+                .setCoordinates(coordinates)
+                .setAnnotations(annotations)
+                .setOrigin(origin)
 
 
         proto.setDeclarator(declarator)
@@ -1002,8 +1006,7 @@ internal class IrModuleSerialization(val logger: WithLogger,
 
 // ---------- Top level ------------------------------------------------------
 
-    fun serializeFileEntry(entry: SourceManager.FileEntry)
-        = KonanIr.FileEntry.newBuilder()
+    fun serializeFileEntry(entry: SourceManager.FileEntry) = KonanIr.FileEntry.newBuilder()
             .setName(entry.name)
             .build()
 
@@ -1016,7 +1019,10 @@ internal class IrModuleSerialization(val logger: WithLogger,
 
         file.declarations.forEach {
             if (it is IrTypeAlias) return@forEach
-            if (it.descriptor.isExpectMember && !it.descriptor.isSerializableExpectClass) return@forEach
+            if (it.descriptor.isExpectMember && !it.descriptor.isSerializableExpectClass) {
+                println("skipping serialization ${it.descriptor} ")
+                return@forEach
+            }
 
             val byteArray = serializeDeclaration(it).toByteArray()
             val index = declarationTable.indexByValue(it)

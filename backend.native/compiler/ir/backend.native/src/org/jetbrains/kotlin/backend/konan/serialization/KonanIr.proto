@@ -1,40 +1,29 @@
-
 syntax = "proto2";
 package org.jetbrains.kotlin.metadata;
 
 option java_outer_classname = "KonanIr";
 option optimize_for = LITE_RUNTIME;
 
-
 message DescriptorReference {
     required string package_fq_name = 1;
     required string class_fq_name = 2;
-    optional UniqId uniq_id = 3;
-    required string name = 9;
-
-    optional bool is_getter = 4 [default=false];
-    optional bool is_setter = 5 [default=false];
-    optional bool is_fake_override = 6 [default=false];
-    optional bool is_default_constructor = 7 [default=false];
-    optional bool is_enum_entry = 8 [default=false];
-    optional bool is_enum_special = 10 [default=false];
+    required string name = 3;
+    optional UniqId uniq_id = 4;
+    optional bool is_getter = 5 [default = false];
+    optional bool is_setter = 6 [default = false];
+    optional bool is_fake_override = 7 [default = false];
+    optional bool is_default_constructor = 8 [default = false];
+    optional bool is_enum_entry = 9 [default = false];
+    optional bool is_enum_special = 10 [default = false];
 }
 
 message UniqId {
     required uint64 index = 1;
 }
 
-message KotlinType {
-
-}
-
 message Coordinates {
     required int32 start_offset = 1;
     required int32 end_offset = 2;
-}
-
-message TypeArguments {
-    repeated IrType type_argument = 1;
 }
 
 /* ------ Top Level---------------------------------------------- */
@@ -48,11 +37,11 @@ message FileEntry { // TODO: extend me.
 }
 
 message IrFile {
-    //required IrDeclarationContainer declaration_container = 1;
     repeated UniqId declaration_id = 1;
     required FileEntry file_entry = 2;
     // TODO: we need a better string management. See metadata serialization as an example.
     required string fq_name = 3;
+    //required IrDeclarationContainer declaration_container = 4;
 }
 
 message IrModule {
@@ -91,13 +80,16 @@ enum IrTypeVariance { // Should we import metadata variance, or better stay sepa
 }
 
 message Annotations {
-    repeated IrCall annotation = 2;
+    repeated IrCall annotation = 1;
 }
 
 message IrTypeBase {
-    optional KotlinType kotlin_type = 1;
-    required Annotations annotations = 2;
-    required IrTypeVariance variance = 3 [default = INV];
+    required Annotations annotations = 1;
+    required IrTypeVariance variance = 2 [default = INV];
+}
+
+message TypeArguments {
+    repeated IrType type_argument = 1;
 }
 
 message IrStarProjection {
@@ -148,14 +140,14 @@ message IrBreak {
 
 message IrBlock {
     required bool is_lambda_origin = 1;
-    repeated IrStatement statement = 2; 
+    repeated IrStatement statement = 2;
 }
 
 message MemberAccessCommon {
-    optional IrExpression dispatch_receiver = 5;
-    optional IrExpression extension_receiver = 6;
-    repeated NullableIrExpression value_argument = 8;
-    required TypeArguments type_arguments = 9;
+    optional IrExpression dispatch_receiver = 1;
+    optional IrExpression extension_receiver = 2;
+    repeated NullableIrExpression value_argument = 3;
+    required TypeArguments type_arguments = 4;
 }
 
 message IrCall {
@@ -174,18 +166,17 @@ message IrCall {
 message IrFunctionReference {
     required IrSymbol symbol = 1;
     required TypeArguments type_arguments = 2;
-    required int32 value_arguments_count = 4;
-    optional string origin = 3;
+    required int32 value_arguments_count = 3;
+    optional string origin = 4;
 }
 
 
 message IrPropertyReference {
-   // required UniqId declaration = 1;
-    required TypeArguments type_arguments = 2;
-    optional IrSymbol field = 3;
-    optional IrSymbol getter = 4;
-    optional IrSymbol setter = 5;
-    optional string origin = 6;
+    required TypeArguments type_arguments = 1;
+    optional IrSymbol field = 2;
+    optional IrSymbol getter = 3;
+    optional IrSymbol setter = 4;
+    optional string origin = 5;
 }
 
 message IrComposite {
@@ -199,16 +190,16 @@ message IrClassReference {
 
 message IrConst {
     oneof value {
-        bool    null = 1;
-        bool    boolean = 2;
-        int32   char = 3;
-        int32   byte = 4;
-        int32   short = 5;
-        int32   int = 6;
-        int64   long = 7;
-        float   float = 8;
-        double  double = 9;
-        string  string = 10;
+        bool null = 1;
+        bool boolean = 2;
+        int32 char = 3;
+        int32 byte = 4;
+        int32 short = 5;
+        int32 int = 6;
+        int64 long = 7;
+        float float = 8;
+        double double = 9;
+        string string = 10;
     }
 }
 
@@ -292,7 +283,7 @@ message IrSpreadElement {
 }
 
 message IrStringConcat {
-    repeated IrExpression argument = 1; 
+    repeated IrExpression argument = 1;
 }
 
 message IrThrow {
@@ -338,32 +329,31 @@ message IrOperation {
         IrBlock block = 1;
         IrBreak break = 2;
         IrCall call = 3;
-        IrClassReference class_reference = 27;
-        IrConst const = 5;
-        IrComposite composite = 26;
-        IrContinue continue = 6;
-        IrDelegatingConstructorCall delegating_constructor_call = 7;
-        IrDoWhile do_while = 25;
-        IrEnumConstructorCall enum_constructor_call = 8;
-        IrFunctionReference function_reference = 4;
-        IrGetClass get_class = 24;
-        IrGetEnumValue get_enum_value = 9;
-        IrGetField get_field = 10;
-        IrGetValue get_value = 11;
-        IrGetObject get_object = 12;
-        IrInstanceInitializerCall instance_initializer_call = 13;
-        IrPropertyReference property_reference = 28;
-        IrReturn return = 14;
-        IrSetField set_field = 15;
-        IrSetVariable set_variable = 16;
-        IrStringConcat string_concat = 17;
-        //IrSyntheticBody synthetic_body = 28;
-        IrThrow throw = 18;
-        IrTry try = 19;
-        IrTypeOp type_op = 20;
-        IrVararg vararg = 21;
-        IrWhen when = 22;
-        IrWhile while = 23;
+        IrClassReference class_reference = 4;
+        IrComposite composite = 5;
+        IrConst const = 6;
+        IrContinue continue = 7;
+        IrDelegatingConstructorCall delegating_constructor_call = 8;
+        IrDoWhile do_while = 9;
+        IrEnumConstructorCall enum_constructor_call = 10;
+        IrFunctionReference function_reference = 11;
+        IrGetClass get_class = 12;
+        IrGetEnumValue get_enum_value = 13;
+        IrGetField get_field = 14;
+        IrGetObject get_object = 15;
+        IrGetValue get_value = 16;
+        IrInstanceInitializerCall instance_initializer_call = 17;
+        IrPropertyReference property_reference = 18;
+        IrReturn return = 19;
+        IrSetField set_field = 20;
+        IrSetVariable set_variable = 21;
+        IrStringConcat string_concat = 22;
+        IrThrow throw = 23;
+        IrTry try = 24;
+        IrTypeOp type_op = 25;
+        IrVararg vararg = 26;
+        IrWhen when = 27;
+        IrWhile while = 28;
     }
 }
 
@@ -388,7 +378,6 @@ message NullableIrExpression {
     optional IrExpression expression = 1;
 }
 
-
 /* ------ Declarations --------------------------------------------- */
 
 message IrTypeAlias {
@@ -408,21 +397,21 @@ message IrFunction {
 
 message IrFunctionBase {
     required string name = 1;
-    required string visibility = 4;
-    required bool is_inline = 5;
-    required bool is_external = 6;
-    required IrTypeParameterContainer type_parameters = 7;
-    optional IrValueParameter dispatch_receiver = 8;
-    optional IrValueParameter extension_receiver = 9;
-    repeated IrValueParameter value_parameter = 10;
-    optional IrStatement body = 12;
-    required IrType return_type = 11;
+    required string visibility = 2;
+    required bool is_inline = 3;
+    required bool is_external = 4;
+    required IrTypeParameterContainer type_parameters = 5;
+    optional IrValueParameter dispatch_receiver = 6;
+    optional IrValueParameter extension_receiver = 7;
+    repeated IrValueParameter value_parameter = 8;
+    optional IrStatement body = 9;
+    required IrType return_type = 10;
 }
 
 message IrConstructor {
-    required IrSymbol symbol = 3;
-    required IrFunctionBase base = 1;
-    required bool is_primary = 2;
+    required IrSymbol symbol = 1;
+    required IrFunctionBase base = 2;
+    required bool is_primary = 3;
 
 }
 
@@ -435,31 +424,31 @@ message IrField {
     required bool is_external = 6;
     required bool is_static = 7;
     required IrType type = 8;
-    }
+}
 
 message IrProperty {
     required UniqId declaration = 1; // IrProperty doesn't have a symbol at all. Preserve this rudiment for now.
-    required string name = 10;
-    required string visibility = 11;
-    required ModalityKind modality = 12;
-    required bool is_var = 13;
-    required bool is_const = 14;
-    required bool is_lateinit = 15;
-    required bool is_delegated = 16;
-    required bool is_external = 17;
-    optional IrField backing_field = 2;
-    optional IrFunction getter = 3;
-    optional IrFunction setter = 4;
+    required string name = 2;
+    required string visibility = 3;
+    required ModalityKind modality = 4;
+    required bool is_var = 5;
+    required bool is_const = 6;
+    required bool is_lateinit = 7;
+    required bool is_delegated = 8;
+    required bool is_external = 9;
+    optional IrField backing_field = 10;
+    optional IrFunction getter = 11;
+    optional IrFunction setter = 12;
 }
 
 message IrVariable {
     required string name = 1;
-    required IrSymbol symbol = 7;
-    required IrType type = 2;
-    required bool is_var = 3;
-    required bool is_const = 4;
-    required bool is_lateinit = 5;
-    optional IrExpression initializer = 6;
+    required IrSymbol symbol = 2;
+    required IrType type = 3;
+    required bool is_var = 4;
+    required bool is_const = 5;
+    required bool is_lateinit = 6;
+    optional IrExpression initializer = 7;
 }
 
 enum ClassKind {
@@ -513,38 +502,38 @@ message IrClass {
     required bool is_inner = 7;
     required bool is_data = 8;
     required bool is_external = 9;
-    required bool is_inline = 14;
-    optional IrValueParameter this_receiver = 10;
-    required IrTypeParameterContainer type_parameters = 11;
-    required IrDeclarationContainer declaration_container = 12;
-    repeated IrType super_type = 13;
+    required bool is_inline = 10;
+    optional IrValueParameter this_receiver = 11;
+    required IrTypeParameterContainer type_parameters = 12;
+    required IrDeclarationContainer declaration_container = 13;
+    repeated IrType super_type = 14;
 }
 
 message IrEnumEntry {
-    required IrSymbol symbol = 4;
-    optional IrExpression initializer = 1;
-    optional IrDeclaration corresponding_class = 2;
-    required string name = 3;
+    required IrSymbol symbol = 1;
+    optional IrExpression initializer = 2;
+    optional IrDeclaration corresponding_class = 3;
+    required string name = 4;
 }
 
 message IrAnonymousInit {
-    required IrSymbol symbol = 2;
-    required IrStatement body = 1;
+    required IrSymbol symbol = 1;
+    required IrStatement body = 2;
 }
 
 // TODO: we need an extension mechanism to accomodate new 
 // IR operators in upcoming releases.
 message IrDeclarator {
     oneof declarator {
-        IrAnonymousInit ir_anonymous_init = 7;
-        IrVariable ir_variable = 1;
-        IrField ir_field = 8;
-        IrFunction ir_function = 2;
-        IrClass ir_class = 3;
+        IrAnonymousInit ir_anonymous_init = 1;
+        IrClass ir_class = 2;
+        IrConstructor ir_constructor = 3;
         IrEnumEntry ir_enum_entry = 4;
-        IrProperty ir_property = 5;
-        IrConstructor ir_constructor = 6;
-        IrTypeAlias ir_type_alias = 9;
+        IrField ir_field = 5;
+        IrFunction ir_function = 6;
+        IrProperty ir_property = 7;
+        IrTypeAlias ir_type_alias = 8;
+        IrVariable ir_variable = 9;
     }
 }
 
@@ -553,14 +542,12 @@ message IrDeclarationOrigin {
 }
 
 message IrDeclaration {
-    //required KotlinDescriptor descriptor = 1;
-    //required UniqId uniqId = 1;
     required IrDeclarationOrigin origin = 1;
     required Coordinates coordinates = 2;
-    required Annotations annotations = 6;
-    required IrDeclarator declarator = 3;
-    repeated IrDeclaration nested = 4;
-    required string file_name = 5;
+    required Annotations annotations = 3;
+    required IrDeclarator declarator = 4;
+    repeated IrDeclaration nested = 5;
+    required string file_name = 6;
 }
 
 /* ------- IrStatements --------------------------------------------- */
@@ -600,4 +587,3 @@ message IrStatement {
         IrSyntheticBody synthetic_body = 7;
     }
 }
-
