@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.backend.konan.lower.loops
 
+import org.jetbrains.kotlin.ir.builders.parent
 import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
 import org.jetbrains.kotlin.backend.common.lower.createIrBuilder
 import org.jetbrains.kotlin.backend.konan.Context
@@ -15,7 +16,6 @@ import org.jetbrains.kotlin.ir.declarations.IrVariable
 import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.*
-import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.ir.symbols.IrSymbol
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.isSimpleTypeWithQuestionMark
@@ -158,11 +158,11 @@ internal class HeaderProcessor(
                 val inductionVariable = scope.createTemporaryVariable(lowerBound.castIfNecessary(progressionType),
                         nameHint = "inductionVariable",
                         isMutable = true,
-                        origin = IrDeclarationOrigin.FOR_LOOP_IMPLICIT_VARIABLE)
+                        origin = IrDeclarationOrigin.FOR_LOOP_IMPLICIT_VARIABLE).also { it.parent = parent }
 
                 val upperBoundTmpVariable = scope.createTemporaryVariable(ensureNotNullable(upperBound.castIfNecessary(progressionType)),
                         nameHint = "upperBound",
-                        origin = IrDeclarationOrigin.FOR_LOOP_IMPLICIT_VARIABLE)
+                        origin = IrDeclarationOrigin.FOR_LOOP_IMPLICIT_VARIABLE).also { it.parent = parent }
 
                 val stepExpression = if (step != null) {
                     ensureNotNullable(if (increasing) step else step.unaryMinus())
@@ -172,7 +172,7 @@ internal class HeaderProcessor(
 
                 val stepValue = scope.createTemporaryVariable(stepExpression,
                         nameHint = "step",
-                        origin = IrDeclarationOrigin.FOR_LOOP_IMPLICIT_VARIABLE)
+                        origin = IrDeclarationOrigin.FOR_LOOP_IMPLICIT_VARIABLE).also { it.parent = parent }
 
                 // Calculate the last element of the progression
                 // The last element can be:
@@ -196,7 +196,7 @@ internal class HeaderProcessor(
                 }
                 val lastValue = scope.createTemporaryVariable(lastElement,
                         nameHint = "last",
-                        origin = IrDeclarationOrigin.FOR_LOOP_IMPLICIT_VARIABLE)
+                        origin = IrDeclarationOrigin.FOR_LOOP_IMPLICIT_VARIABLE).also { it.parent = parent }
 
                 return when (progressionInfo) {
                     is ArrayHeaderInfo -> ArrayLoopHeader(

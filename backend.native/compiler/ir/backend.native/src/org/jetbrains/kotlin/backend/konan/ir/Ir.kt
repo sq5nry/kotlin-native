@@ -367,6 +367,9 @@ internal class KonanSymbols(context: Context, val symbolTable: SymbolTable, val 
     val getContinuation = symbolTable.referenceSimpleFunction(
             context.getInternalFunctions("getContinuation").single())
 
+    val returnIfSuspended = symbolTable.referenceSimpleFunction(
+            context.getInternalFunctions("returnIfSuspended").single())
+
     val konanSuspendCoroutineUninterceptedOrReturn = symbolTable.referenceSimpleFunction(
             context.getInternalFunctions("suspendCoroutineUninterceptedOrReturn").single())
 
@@ -432,9 +435,13 @@ internal class KonanSymbols(context: Context, val symbolTable: SymbolTable, val 
                 } && !it.isExpect
             }
 
-    val isInitializedGetterDescriptor = isInitializedPropertyDescriptor.getter!!
+    val isInitializedGetter = symbolTable.referenceSimpleFunction(isInitializedPropertyDescriptor.getter!!)
 
     val kFunctionImpl =  symbolTable.referenceClass(context.reflectionTypes.kFunctionImpl)
+
+    val kMutableProperty0 = symbolTable.referenceClass(context.reflectionTypes.kMutableProperty0)
+    val kMutableProperty1 = symbolTable.referenceClass(context.reflectionTypes.kMutableProperty1)
+    val kMutableProperty2 = symbolTable.referenceClass(context.reflectionTypes.kMutableProperty2)
 
     val kProperty0Impl = symbolTable.referenceClass(context.reflectionTypes.kProperty0Impl)
     val kProperty1Impl = symbolTable.referenceClass(context.reflectionTypes.kProperty1Impl)
