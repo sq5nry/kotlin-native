@@ -14,6 +14,9 @@ import org.jetbrains.kotlin.backend.konan.irasdescriptors.FunctionDescriptor
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.PackageFragmentDescriptor
 import org.jetbrains.kotlin.backend.konan.isInlined
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.ir.declarations.IrDeclaration
+import org.jetbrains.kotlin.ir.declarations.IrField
+import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.types.isUnit
 import org.jetbrains.kotlin.name.FqName
@@ -227,3 +230,18 @@ tailrec internal fun DeclarationDescriptor.findPackage(): PackageFragmentDescrip
 
 fun FunctionDescriptor.isComparisonDescriptor(map: Map<SimpleType, IrSimpleFunction>): Boolean =
         this in map.values
+
+val IrDeclaration.isPropertyAccessor get() =
+    this is IrSimpleFunction && this.correspondingProperty != null
+
+val IrDeclaration.isPropertyField get() =
+    this is IrField && this.correspondingProperty != null
+
+val IrDeclaration.isTopLevelDeclaration get() =
+    parent !is IrDeclaration && !this.isPropertyAccessor && !this.isPropertyField
+
+fun IrDeclaration.findTopLevelDeclaration(): IrDeclaration =
+    if (this.isTopLevelDeclaration) this
+    else if (this.isPropertyAccessor) (this as IrSimpleFunction).correspondingProperty!!.findTopLevelDeclaration()
+    else if (this.isPropertyField) (this as IrField).correspondingProperty!!.findTopLevelDeclaration()
+    else (this.parent as IrDeclaration).findTopLevelDeclaration()

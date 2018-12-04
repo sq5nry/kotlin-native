@@ -24,7 +24,10 @@ internal class BackingFieldVisitor(val context: Context) : IrElementVisitorVoid 
     override fun visitProperty(declaration: IrProperty) {
         super.visitProperty(declaration)
 
+        println("visitProperty: ${declaration.descriptor}")
+
         if (declaration.isDelegated) {
+            println("it is delegated")
             val irClass = declaration.parent as? IrClass
             val list = irClass?.let { context.ir.classesDelegatedBackingFields.getOrPut(irClass.descriptor) { mutableListOf() } }
             list?.add(declaration.backingField!!.descriptor)

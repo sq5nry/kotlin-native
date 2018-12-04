@@ -20,6 +20,10 @@ fun newUniqId(uniqId: UniqId): KonanIr.UniqId =
 fun newDescriptorUniqId(index: Long): KonanProtoBuf.DescriptorUniqId =
     KonanProtoBuf.DescriptorUniqId.newBuilder().setIndex(index).build()
 
+fun KonanIr.UniqId.uniqId(): UniqId = UniqId(this.index, this.isLocal)
+fun KonanIr.UniqId.uniqIdKey(moduleDescriptor: ModuleDescriptor) =
+    UniqIdKey(moduleDescriptor, this.uniqId())
+
 // -----------------------------------------------------------
 /*
 val KonanIr.KotlinDescriptor.index: Long

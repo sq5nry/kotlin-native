@@ -18,8 +18,10 @@ package org.jetbrains.kotlin.backend.konan.serialization
 
 import org.jetbrains.kotlin.backend.common.WithLogger
 import org.jetbrains.kotlin.backend.common.ir.ir2string
+import org.jetbrains.kotlin.backend.konan.descriptors.findTopLevelDeclaration
 import org.jetbrains.kotlin.backend.konan.descriptors.isExpectMember
 import org.jetbrains.kotlin.backend.konan.descriptors.isSerializableExpectClass
+import org.jetbrains.kotlin.backend.konan.ir.ir2stringWholezzz
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.name
 import org.jetbrains.kotlin.backend.konan.library.SerializedIr
 import org.jetbrains.kotlin.backend.konan.llvm.isExported
@@ -197,10 +199,14 @@ internal class IrModuleSerialization(
         val uniqId =
             declarationTable.indexByValue(symbol.owner as IrDeclaration) // TODO: change symbol to be IrSymbolDeclaration?
         proto.setUniqId(newUniqId(uniqId))
+        val topLevelUniqId =
+            declarationTable.indexByValue((symbol.owner as IrDeclaration).findTopLevelDeclaration())
+        proto.setTopLevelUniqId(newUniqId(topLevelUniqId))
 
         serializeDescriptorReference(declaration) ?. let { proto.setDescriptorReference(it) }
+        //serializeDescriptorReference(declaration.findTopLevelDeclaration()) ?. let { proto.setTopLevelDescriptorReference(it) }
 
-        if (uniqId.index == -3746695740799408782) {
+        if (uniqId.index == 18900L) {
                     val owner = symbol.owner as IrDeclaration
                     println("serialized IrSymbol: index = ${uniqId.index}, descriptor = ${symbol.descriptor}, descriptorIndex = ${descriptorTable.descriptors[symbol.descriptor]},  owner = $owner symbol=$symbol owner.descriptor = ${owner.descriptor}")
         }
@@ -954,6 +960,7 @@ internal class IrModuleSerialization(
 
     private fun serializeIrClass(clazz: IrClass): KonanIr.IrClass {
 
+        if (setOf("Exception", "Throwable").contains(clazz.name.asString())) println("serializing: ${ir2stringWholezzz(clazz)}")
         val proto = KonanIr.IrClass.newBuilder()
             .setName(clazz.name.toString())
             .setSymbol(serializeIrSymbol(clazz.symbol))
@@ -1067,6 +1074,7 @@ internal class IrModuleSerialization(
 
             val byteArray = serializeDeclaration(it).toByteArray()
             val uniqId = declarationTable.indexByValue(it)
+            println("serializing ${it.descriptor} as $uniqId")
             topLevelDeclarations.put(uniqId, byteArray)
             proto.addDeclarationId(newUniqId(uniqId))
         }

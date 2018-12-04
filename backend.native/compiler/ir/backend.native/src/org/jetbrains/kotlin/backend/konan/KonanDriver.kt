@@ -19,10 +19,12 @@ import org.jetbrains.kotlin.cli.common.messages.AnalyzerWithCompilerReport
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.languageVersionSettings
+import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.impl.EmptyPackageFragmentDescriptor
 import org.jetbrains.kotlin.ir.declarations.impl.IrFileImpl
 import org.jetbrains.kotlin.ir.symbols.impl.IrFileSymbolImpl
 import org.jetbrains.kotlin.ir.util.hasInlineFunctions
+import org.jetbrains.kotlin.ir.util.patchDeclarationParents
 import org.jetbrains.kotlin.konan.util.printMillisec
 import org.jetbrains.kotlin.konan.utils.KonanFactories.DefaultDeserializedDescriptorFactory
 import org.jetbrains.kotlin.name.FqName
@@ -75,24 +77,22 @@ fun runTopLevelPhases(konanConfig: KonanConfig, environment: KotlinCoreEnvironme
         @Suppress("DEPRECATION")
         context.psi2IrGeneratorContext = generatorContext
 
-        val deserializer = printMillisec("constructor") { IrModuleDeserialization(context as WithLogger, context.moduleDescriptor, generatorContext.irBuiltIns, generatorContext.symbolTable) }
+        val deserializer = printMillisec("constructor") { IrModuleDeserialization(context as WithLogger,
+            context.moduleDescriptor, generatorContext.irBuiltIns, generatorContext.symbolTable, {moduleDescriptor: ModuleDescriptor, uniqId: UniqId -> moduleToLibrary[moduleDescriptor]!!.irDeclaration(uniqId.index, uniqId.isLocal)}) }
         val specifics = context.config.configuration.get(CommonConfigurationKeys.LANGUAGE_VERSION_SETTINGS)!!
 
         val irModules = context.moduleDescriptor.allDependencyModules.map {
             val library = moduleToLibrary[it]
             if (library == null) return@map null
-            printMillisec("${library.libraryName}") {deserializer.deserializedIrModule(it, library.wholeIr, {uniqid -> library.irDeclaration(uniqid.index, uniqid.isLocal)})}
+            printMillisec("${library.libraryName}") {deserializer.deserializedIrModule(it, library.wholeIr)}
         }.filterNotNull()
-/*
-        printMillisec("loadModules") {
-            irModules.forEach {
-                generatorContext.symbolTable.loadModule(it)
-            }
-        }
-*/
+
         val symbols = KonanSymbols(context, generatorContext.symbolTable, generatorContext.symbolTable.lazyWrapper)
         val module = translator.generateModuleFragment(generatorContext, environment.getSourceFiles(), deserializer)
 
+        irModules.forEach {
+            it.patchDeclarationParents()
+        }
 
         context.irModule = module
 

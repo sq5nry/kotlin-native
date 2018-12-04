@@ -49,3 +49,8 @@ internal val CallableMemberDescriptor.isDeserializableCallable
     get () = (this.propertyIfAccessor is DeserializedCallableMemberDescriptor)
 
 
+
+fun DeclarationDescriptor.findTopLevelDescriptor(): DeclarationDescriptor {
+    return if (this.containingDeclaration is org.jetbrains.kotlin.descriptors.PackageFragmentDescriptor) this.propertyIfAccessor
+    else this.containingDeclaration!!.findTopLevelDescriptor()
+}

@@ -72,8 +72,10 @@ enum IrSymbolKind {
 message IrSymbol {
     required IrSymbolKind kind = 1;
     required UniqId uniq_id = 2;
-    optional string fqname = 3;
-    optional DescriptorReference descriptor_reference = 4;
+    required UniqId top_level_uniq_id = 3;
+    optional string fqname = 4;
+    optional DescriptorReference descriptor_reference = 5;
+    //optional DescriptorReference top_level_descriptor_reference = 6;
     //optional bool standalone_field = 5 [default = false];
     //optional bool is_receiver = 6 [default = false];
 }

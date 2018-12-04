@@ -1,9 +1,11 @@
 package org.jetbrains.kotlin.backend.konan.serialization
 
+import org.jetbrains.kotlin.backend.konan.descriptors.isTopLevelDeclaration
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.fqNameSafe
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.name
 import org.jetbrains.kotlin.backend.konan.llvm.*
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
+import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.IrAnonymousInitializerImpl
 import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
@@ -88,6 +90,11 @@ data class UniqId (
     val index: Long,
     val isLocal: Boolean
 )
+data class UniqIdKey private constructor(val uniqId: UniqId, val moduleDescriptor: ModuleDescriptor?) {
+    constructor(moduleDescriptor: ModuleDescriptor?, uniqId: UniqId)
+            : this(uniqId, if (uniqId.isLocal) moduleDescriptor else null)
+}
+
 
 // TODO: We don't manage id clashes anyhow now.
 class DeclarationTable(val builtIns: IrBuiltIns, val descriptorTable: DescriptorTable) {
@@ -121,7 +128,7 @@ class DeclarationTable(val builtIns: IrBuiltIns, val descriptorTable: Descriptor
             }
         }
         reverse.putOnce(index, value)
-        //if (!index.isLocal) textual.putOnce(index, "${value.symbolName()} descriptor = ${value.descriptor}")
+        if (!index.isLocal /* && value.isTopLevelDeclaration*/) textual.putOnce(index, "${value.symbolName()} descriptor = ${value.descriptor}")
 
         return index
     }
