@@ -53,6 +53,12 @@ public inline class Future<T> @PublishedApi internal constructor(val id: Int) {
         }
 
     /**
+     * Notify given worker about this future's state change. Use [Worker.setFutureProcessor] to set custom listener.
+     */
+    @SymbolName("Konan_Worker_setFutureSubscriber")
+    external public fun setFutureSubscriber(worker: Worker)
+
+    /**
      * The result of the future computation.
      * Blocks execution until the future is ready. Second attempt to get will result in an error.
      */

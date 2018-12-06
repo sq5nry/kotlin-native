@@ -87,6 +87,12 @@ internal class InteropBuiltIns(builtIns: KonanBuiltIns, vararg konanPrimitives: 
 
     val executeImplFunction = concurrentPackageScope.getContributedFunctions("executeImpl").single()
 
+    val setFutureProcessorFunctiion = concurrentPackageScope.getContributedClass("Worker")
+        .unsubstitutedMemberScope.getContributedFunctions("setFutureProcessor").single()
+
+    val setFutureProcessorInternalFunctiion =
+            concurrentPackageScope.getContributedFunctions("setFutureProcessorInternal").single()
+
     val signExtend = packageScope.getContributedFunctions("signExtend").single()
 
     val narrow = packageScope.getContributedFunctions("narrow").single()
