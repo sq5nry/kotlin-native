@@ -66,6 +66,14 @@ public inline class Future<T> @PublishedApi internal constructor(val id: Int) {
             get() = consume { it -> it }
 
     /**
+     * Discard the future result without cancelling it. Important when send an request to worker but do not
+     * care about resul.
+     */
+    public fun discard(): Unit {
+        discardInternal(id)
+    }
+
+    /**
      * A [FutureState] of this future
      */
     public val state: FutureState
