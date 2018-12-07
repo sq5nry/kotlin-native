@@ -10,7 +10,7 @@ package kotlin.test
  */
 @Retention(AnnotationRetention.SOURCE)
 @Target(AnnotationTarget.FUNCTION)
-public annotation class Test
+public actual annotation class Test
 
 /**
  * Marks a function to be executed before a suite. Not supported in Kotlin/Common.
@@ -46,7 +46,7 @@ public annotation class AfterEach
  */
 @Retention(AnnotationRetention.SOURCE)
 @Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION)
-public annotation class Ignore
+public actual annotation class Ignore
 
-public typealias AfterTest = AfterEach
-public typealias BeforeTest = BeforeEach
+public actual typealias AfterTest = AfterEach
+public actual typealias BeforeTest = BeforeEach
