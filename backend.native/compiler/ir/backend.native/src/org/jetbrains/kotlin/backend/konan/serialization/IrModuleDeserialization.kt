@@ -21,9 +21,13 @@ import org.jetbrains.kotlin.backend.common.WithLogger
 import org.jetbrains.kotlin.backend.common.descriptors.*
 import org.jetbrains.kotlin.backend.common.ir.DeclarationFactory
 import org.jetbrains.kotlin.backend.common.ir.ir2string
+import org.jetbrains.kotlin.backend.konan.descriptors.findPackage
 import org.jetbrains.kotlin.backend.konan.descriptors.findTopLevelDescriptor
+import org.jetbrains.kotlin.backend.konan.descriptors.getPackageFragments
+import org.jetbrains.kotlin.backend.konan.descriptors.isForwardDeclarationModule
 import org.jetbrains.kotlin.backend.konan.ir.NaiveSourceBasedFileEntryImpl
 import org.jetbrains.kotlin.backend.konan.ir.ir2stringWholezzz
+import org.jetbrains.kotlin.backend.konan.llvm.localHash
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.impl.EmptyPackageFragmentDescriptor
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
@@ -60,7 +64,7 @@ import org.jetbrains.kotlin.serialization.deserialization.descriptors.*
 import org.jetbrains.kotlin.serialization.konan.KonanSerializerProtocol
 import org.jetbrains.kotlin.types.Variance
 
-class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleDescriptor, val builtIns: IrBuiltIns, val symbolTable: SymbolTable, val reader: (ModuleDescriptor, UniqId) -> ByteArray) : IrDeserializer {
+class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleDescriptor, val builtIns: IrBuiltIns, val symbolTable: SymbolTable, val forwardModuleDescriptor: ModuleDescriptor?, val reader: (ModuleDescriptor, UniqId) -> ByteArray) : IrDeserializer {
 
     private val loopIndex = mutableMapOf<Int, IrLoop>()
 
@@ -74,6 +78,7 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
     //val deserializedDeclarations = mutableMapOf<DeclarationDescriptor, IrDeclaration>()
     val reachableTopLevels = mutableSetOf<UniqIdKey>()
     val deserializedTopLevels = mutableSetOf<UniqIdKey>()
+    val forwardDeclarations = mutableSetOf<IrSymbol>()
 
     //val localToTopLevel = mutableMapOf<DeclarationDescriptor, DeclarationDescriptor>()
 
@@ -81,8 +86,6 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
         var currentIndex = 0L
         builtIns.knownBuiltins.forEach {
             deserializedSymbols.put(UniqIdKey(null, UniqId(currentIndex, isLocal = false)), it.symbol)
-            //deserializedDeclarations.put(it.descriptor, it)
-            //println("$it ${it.descriptor} ${it.symbol} bound = ${it.symbol.isBound} owner = ${it.symbol.owner}")
             assert(symbolTable.referenceSimpleFunction(it.descriptor) == it.symbol)
             currentIndex++
         }
@@ -118,14 +121,6 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
                 .getContributedFunctions(Name.identifier(name), NoLookupLocation.FROM_BACKEND).single()
         }
 
-        //if (proto.isReceiverParameter) {
-        //    return clazz!!.thisAsReceiverParameter
-        //}
-
-        //if (protoIndex == -4300068518245995232 || protoIndex == -3985399468095095176) {
-        //    println("packageFqName string = ${proto.packageFqName} classFqName string = '${proto.classFqName}' packageFqName = $packageFqName, classFqName=$classFqName protoIndex=$protoIndex")
-        //    println(members)
-        //}
         members.forEach { member ->
             if (proto.isDefaultConstructor && member is ClassConstructorDescriptor) return member
 
@@ -136,7 +131,6 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
                     setOf(member)
 
             val memberIndices = realMembers.map { it.getUniqId()?.index }.filterNotNull()
-            //if (protoIndex == -4300068518245995232 || protoIndex == -3985399468095095176) println("memberIndices = $memberIndices")
 
             if (memberIndices.contains(protoIndex)) {
 
@@ -160,12 +154,17 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
         val topLevelKey = proto.topLevelUniqId.uniqIdKey(deserializedModuleDescriptor!!)
 
         if (!deserializedTopLevels.contains(topLevelKey)) reachableTopLevels.add(topLevelKey)
+        //if (deserializedSymbols[topLevelKey]?.isBound != true) {
+        //    println("index for topLeve = $index")
+        //    reachableTopLevels.add(topLevelKey)
+        //}
 
         val symbol = deserializedSymbols.getOrPut(key) {
             val descriptor = if (proto.hasDescriptorReference()) {
-                deserializeDescriptorReference(proto.descriptorReference)
+                val deserialized = deserializeDescriptorReference(proto.descriptorReference)
+                if (deserialized.name.asString() == "__sFILEX") println("cnames: $deserialized key=$key") else Unit
+                deserialized
             } else {
-                //println("there is no descriptor reference in the symbol")
                 null
             }
 
@@ -219,8 +218,15 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
 
             //topLevelDescriptor ?. let { localToTopLevel.put(newSymbol.descriptor, it) }
 
-
             newSymbol
+        }
+
+
+        if (symbol.descriptor is ClassDescriptor &&
+            symbol.descriptor !is WrappedClassDescriptor &&
+            symbol.descriptor.module.isForwardDeclarationModule) {
+
+            forwardDeclarations.add(symbol)
         }
 
         //println("deserializeIrSymbol: descriptor = ${symbol.descriptor} index = $index")
@@ -263,7 +269,7 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
     fun deserializeSimpleType(proto: KonanIr.IrSimpleType): IrSimpleType {
         val arguments = proto.argumentList.map { deserializeIrTypeArgument(it) }
         val annotations = deserializeAnnotations(proto.base.annotations)
-        val symbol = deserializeIrSymbol(proto.classifier) as IrClassifierSymbol
+        val symbol = deserializeIrSymbol(proto.classifier) as? IrClassifierSymbol ?: error("could not convert sym to ClassifierSym ${proto.classifier.kind} ${proto.classifier.uniqId.index} ${proto.classifier.uniqId.isLocal}")
         logger.log { "deserializeSimpleType: symbol=$symbol" }
         val result = IrSimpleTypeImpl(
             null,
@@ -879,8 +885,6 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
         val superTypes = proto.superTypeList.map { deserializeIrType(it) }
         parameter.superTypes.addAll(superTypes)
 
-        //parameter.descriptor.let { if (it is WrappedTypeParameterDescriptor) it.bind(parameter) }
-
         return parameter
     }
 
@@ -913,7 +917,7 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
     ): IrValueParameter {
 
         val varargElementType = if (proto.hasVarargElementType()) deserializeIrType(proto.varargElementType) else null
-        val parameter = try {
+        val parameter =
             IrValueParameterImpl(
                 start, end, origin,
                 deserializeIrSymbol(proto.symbol) as IrValueParameterSymbol,
@@ -923,18 +927,14 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
                 varargElementType,
                 proto.isCrossinline,
                 proto.isNoinline
-            )
-        } catch (e: Throwable) {
-            println("uniqId: ${proto.symbol.uniqId.index} in name = ${proto.name}")
-            throw e
-            null
+        ).apply {
+                defaultValue = if (proto.hasDefaultValue()) {
+                    val expression = deserializeExpression(proto.defaultValue)
+                    IrExpressionBodyImpl(expression)
+                } else null
         }
-        parameter!!.defaultValue = if (proto.hasDefaultValue()) {
-            val expression = deserializeExpression(proto.defaultValue)
-            IrExpressionBodyImpl(expression)
-        } else null
 
-        return parameter!!
+        return parameter
     }
 
     private fun deserializeIrClass(proto: KonanIr.IrClass, start: Int, end: Int, origin: IrDeclarationOrigin): IrClass {
@@ -958,8 +958,6 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
                 )
             })
 
-        // println("deserializeIrClass, name = ${proto.name} symbol=$symbol index=${proto.symbol.uniqId.index}")
-
         proto.declarationContainer.declarationList.forEach {
             val member = deserializeDeclaration(it, clazz)
             clazz.addMember(member)
@@ -974,11 +972,6 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
         val superTypes = proto.superTypeList.map { deserializeIrType(it) }
         clazz.superTypes.addAll(superTypes)
 
-        //val symbolTable = context.ir.symbols.symbolTable
-        //clazz.createParameterDeclarations(symbolTable)
-        //clazz.addFakeOverrides(symbolTable)
-        //clazz.setSuperSymbols(symbolTable)
-
         return clazz
     }
 
@@ -990,10 +983,8 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
         origin: IrDeclarationOrigin
     ) {
 
-        function.returnType = deserializeIrType(base.returnType)
         function.body = if (base.hasBody()) deserializeStatement(base.body) as IrBody else null
 
-        //val valueParameters = base.valueParameterList.map { deserializeIrValueParameter(it, start, end, origin, function) }
         val valueParameters = base.valueParameterList.map { deserializeDeclaration(it, function) as IrValueParameter }
         function.valueParameters.addAll(valueParameters)
         function.dispatchReceiverParameter = if (base.hasDispatchReceiver()) deserializeDeclaration(
@@ -1018,13 +1009,12 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
 
         val function = symbolTable.declareSimpleFunction(UNDEFINED_OFFSET, UNDEFINED_OFFSET, irrelevantOrigin,
             symbol.descriptor, { symbol ->
-
-                println("providing delcaration for symbol: $symbol")
                 IrFunctionImpl(
                     start, end, origin, symbol,
                     Name.identifier(proto.base.name),
                     deserializeVisibility(proto.base.visibility),
                     deserializeModality(proto.modality),
+                    deserializeIrType(proto.base.returnType),
                     proto.base.isInline,
                     proto.base.isExternal,
                     proto.isTailrec,
@@ -1037,9 +1027,6 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
         function.overriddenSymbols.addAll(overridden)
 
         function.correspondingProperty = correspondingProperty
-
-//        function.createParameterDeclarations(symbolTable)
-//        function.setOverrides(symbolTable)
 
         return function
     }
@@ -1136,6 +1123,7 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
                     symbol,
                     Name.identifier(proto.base.name),
                     deserializeVisibility(proto.base.visibility),
+                    deserializeIrType(proto.base.returnType),
                     proto.base.isInline,
                     proto.base.isExternal,
                     proto.isPrimary
@@ -1234,7 +1222,6 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
             symbolTable.declareSimpleFunction(UNDEFINED_OFFSET, UNDEFINED_OFFSET, irrelevantOrigin,
                 descriptor, { symbol -> it })
 
-            //deserializedDeclarations.put(it.descriptor, it)
         }
 
         return property
@@ -1325,7 +1312,7 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
         }
 
     val reversedFileIndex = mutableMapOf<UniqIdKey, IrFile>()
-    val UniqIdKey.nonNullModuleDescriptor get() = try { this.moduleDescriptor ?: reversedFileIndex[this]!!.packageFragmentDescriptor.containingDeclaration } catch (e: Throwable) {
+    val UniqIdKey.nonNullModuleDescriptor get() = try { this.moduleDescriptor ?: reversedFileIndex[this]?.packageFragmentDescriptor?.containingDeclaration /*?: currentModule  Shouldn't it be forward declaration module? */ } catch (e: Throwable) {
         println("uniqId = ${this.uniqId} module = ${this.moduleDescriptor} this = $this reversedFileIndex[this] = ${reversedFileIndex[this]} packageFragmentDescriptor = ${reversedFileIndex[this]?.packageFragmentDescriptor} containingDeclaration = ${reversedFileIndex[this]?.packageFragmentDescriptor?.containingDeclaration}")
         throw e
     }
@@ -1336,53 +1323,100 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
     }
 
     fun loadTopLevelDeclarationProto(uniqIdKey: UniqIdKey): KonanIr.IrDeclaration {
-        val stream = reader(uniqIdKey.nonNullModuleDescriptor, uniqIdKey.uniqId).codedInputStream
+        val stream = reader(uniqIdKey.nonNullModuleDescriptor!!, uniqIdKey.uniqId).codedInputStream
         return KonanIr.IrDeclaration.parseFrom(stream, KonanSerializerProtocol.extensionRegistry)
     }
 
-    override fun findDeserializedDeclaration(symbol: IrSymbol): IrDeclaration {
-        println("findDeserializedDeclaration for ${symbol.descriptor} $symbol")
+    override fun findDeserializedDeclaration(symbol: IrSymbol): IrDeclaration? {
+        println("findDeserializedDeclaration for ${symbol.descriptor} $symbol in ${symbol.descriptor.containingDeclaration} module = ${symbol.descriptor.module.name.asString()}")
         if (!symbol.isBound) {
             val topLevelDescriptor = symbol.descriptor.findTopLevelDescriptor()
-            println("top level is $topLevelDescriptor")
-            val descriptorUniqId= topLevelDescriptor.getUniqId() ?: error("could not get descriptor uniq id for $topLevelDescriptor")
+
+            if (topLevelDescriptor.module.isForwardDeclarationModule) return null
+
+            if (topLevelDescriptor !is DeserializedClassDescriptor && topLevelDescriptor !is DeserializedCallableMemberDescriptor) {
+                println("skipping top level descriptior: $topLevelDescriptor")
+                return null
+            }
+
+            val descriptorUniqId= topLevelDescriptor.getUniqId()
+                ?: error("could not get descriptor uniq id for $topLevelDescriptor")
             val uniqId = UniqId(descriptorUniqId.index, isLocal = false)
-            val module = topLevelDescriptor.module
+
             val topLevelKey = UniqIdKey(topLevelDescriptor.module, uniqId)
-            //val declaration = deserializeTopLevelDeclaration(key)
 
             reachableTopLevels.add(topLevelKey)
 
             do {
                 val key = reachableTopLevels.first()
+
+                //println("key = $key")
+
                 if (deserializedSymbols[key]?.isBound == true) {
                     reachableTopLevels.remove(key)
+                    println("this symbol is bound already, countinue: ${deserializedSymbols[key]?.descriptor}")
                     continue
                 }
 
-                val previousModuleDescriptor = deserializedModuleDescriptor
-                deserializedModuleDescriptor = module
+                //println("deserializedSymbols[key] = ${deserializedSymbols[key]?.descriptor}")
 
+                val previousModuleDescriptor = deserializedModuleDescriptor
+                deserializedModuleDescriptor = key.nonNullModuleDescriptor
+
+                if (deserializedModuleDescriptor == null) {
+                    deserializedModuleDescriptor = previousModuleDescriptor
+                    reachableTopLevels.remove(key)
+                    deserializedTopLevels.add(key)
+                    println("module descriptor is null, continue")
+                    continue
+                }
 
                 val reachable = deserializeTopLevelDeclaration(key)
 
                 deserializedModuleDescriptor = previousModuleDescriptor
 
                 reversedFileIndex[key]!!.declarations.add(reachable)
-                //println("removing $it")
                 reachableTopLevels.remove(key)
                 deserializedTopLevels.add(key)
             } while(reachableTopLevels.isNotEmpty())
-        } else println("already bound")
-
-        println("findDeserializedDeclaration: for symbol $symbol owner is ${symbol.owner}")
+        }
 
         return symbol.owner as IrDeclaration
     }
 
-    fun deserializeIrFile(fileProto: KonanIr.IrFile, moduleDescriptor: ModuleDescriptor): IrFile {
-        //println("### deserializeIrFile: ${fileProto.fileEntry.name}")
+    override fun declareForwardDeclarations() {
+        if (forwardModuleDescriptor == null) return // null
+        println("forward module is not null: $forwardModuleDescriptor")
+
+        println("forward declarations: $forwardDeclarations")
+
+        val packageFragments = forwardDeclarations.map { it.descriptor.findPackage() }.distinct()
+
+        val files = packageFragments.map { packageFragment ->
+            println("forward fragment: $packageFragment")
+            val symbol = IrFileSymbolImpl(packageFragment)
+            val file = IrFileImpl(NaiveSourceBasedFileEntryImpl("<forward declarations pseudo-file>"), symbol)
+            val symbols = forwardDeclarations
+                .filter { !it.isBound }
+                .filter { it.descriptor.findPackage() == packageFragment }
+            val declarations = symbols.map {
+
+                println("forward symbol: ${it.descriptor}")
+                symbolTable.declareClass(UNDEFINED_OFFSET, UNDEFINED_OFFSET, irrelevantOrigin,
+                    it.descriptor as ClassDescriptor,
+                    { symbol: IrClassSymbol -> IrClassImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, irrelevantOrigin, symbol) }
+                )
+            }
+            file.declarations.addAll(declarations)
+            file
+        }
+        /*return*/ IrModuleFragmentImpl(forwardModuleDescriptor, builtIns, files)
+    }
+
+    fun deserializeIrFile(fileProto: KonanIr.IrFile, moduleDescriptor: ModuleDescriptor, deserializeAllDeclarations: Boolean): IrFile {
         val fileEntry = NaiveSourceBasedFileEntryImpl(fileProto.fileEntry.name)
+
+        println("file name = ${fileProto.fileEntry.name}")
 
         // TODO: we need to store "" in protobuf, I suppose. Or better yet, reuse fqname storage from metadata.
         val fqName = if (fileProto.fqName == "<root>") FqName.ROOT else FqName(fileProto.fqName)
@@ -1393,25 +1427,25 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
         val file = IrFileImpl(fileEntry, symbol, fqName)
 
         fileProto.declarationIdList.forEach {
-            if (it.index == 1749096279310645609L) {
-                println("for index 1749096279310645609 we have module ${moduleDescriptor.name.asString()} file ${file.fileEntry.name}")
+            val uniqIdKey = it.uniqIdKey(moduleDescriptor)
+            if (uniqIdKey.uniqId.index == 744676413816618719L) println("744676413816618719: module=$moduleDescriptor, file=${fileProto.fileEntry.name}")
+            reversedFileIndex.put(uniqIdKey, file)
+
+            if (deserializeAllDeclarations) {
+                file.declarations.add(deserializeTopLevelDeclaration(uniqIdKey))
             }
-            reversedFileIndex.put(it.uniqIdKey(moduleDescriptor), file)
-//            val stream = reader(it.uniqIdKey(moduleDescriptor).codedInputStream
-//            val proto = KonanIr.IrDeclaration.parseFrom(stream, KonanSerializerProtocol.extensionRegistry)
-//            val declaration = deserializeDeclaration(proto, file)
-//            file.declarations.add(declaration)
         }
 
         return file
     }
 
-    fun deserializeIrModule(proto: KonanIr.IrModule, moduleDescriptor: ModuleDescriptor): IrModuleFragment {
+    fun deserializeIrModule(proto: KonanIr.IrModule, moduleDescriptor: ModuleDescriptor, deserializeAllDeclarations: Boolean): IrModuleFragment {
 
         deserializedModuleDescriptor = moduleDescriptor
+        println("module name = $moduleDescriptor")
 
         val files = proto.fileList.map {
-            deserializeIrFile(it, moduleDescriptor)
+            deserializeIrFile(it, moduleDescriptor, deserializeAllDeclarations)
 
         }
         val module = IrModuleFragmentImpl(moduleDescriptor, builtIns, files)
@@ -1419,9 +1453,9 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
         return module
     }
 
-    fun deserializedIrModule(moduleDescriptor: ModuleDescriptor, byteArray: ByteArray): IrModuleFragment {
+    fun deserializedIrModule(moduleDescriptor: ModuleDescriptor, byteArray: ByteArray, deserializeAllDeclarations: Boolean = false): IrModuleFragment {
         val proto = KonanIr.IrModule.parseFrom(byteArray.codedInputStream, KonanSerializerProtocol.extensionRegistry)
-        return deserializeIrModule(proto, moduleDescriptor)
+        return deserializeIrModule(proto, moduleDescriptor, deserializeAllDeclarations)
     }
 }
 

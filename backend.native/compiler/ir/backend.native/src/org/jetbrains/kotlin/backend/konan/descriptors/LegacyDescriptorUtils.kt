@@ -8,7 +8,6 @@ package org.jetbrains.kotlin.backend.konan.descriptors
 import org.jetbrains.kotlin.backend.common.atMostOne
 import org.jetbrains.kotlin.backend.konan.binaryTypeIsReference
 import org.jetbrains.kotlin.backend.konan.isObjCClass
-import org.jetbrains.kotlin.backend.konan.serialization.isExported
 import org.jetbrains.kotlin.builtins.functions.FunctionClassDescriptor
 import org.jetbrains.kotlin.builtins.getFunctionalClassKind
 import org.jetbrains.kotlin.builtins.isFunctionType
@@ -163,10 +162,6 @@ internal val FunctionDescriptor.needsInlining: Boolean
         if (inlineConstructor) return true
         return (this.isInline && !this.isExternal)
     }
-/*
-internal val FunctionDescriptor.needsSerializedIr: Boolean
-    get() = (this.needsInlining && this.isExported())
-*/
 
 fun AnnotationDescriptor.getStringValueOrNull(name: String): String? {
     val constantValue = this.allValueArguments.entries.atMostOne {

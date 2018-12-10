@@ -1993,7 +1993,8 @@ internal class CodeGeneratorVisitor(val context: Context, val lifetimes: Map<IrE
      */
     private fun evaluateExplicitArgs(expression: IrMemberAccessExpression): List<LLVMValueRef> {
         val evaluatedArgs = expression.getArguments().map { (param, argExpr) ->
-            param to evaluateExpression(argExpr)
+            val evaluated = evaluateExpression(argExpr)
+            param to evaluated
         }.toMap()
 
         val allValueParameters = expression.descriptor.allParameters

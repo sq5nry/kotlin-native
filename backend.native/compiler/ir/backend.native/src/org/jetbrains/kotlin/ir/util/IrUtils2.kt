@@ -462,6 +462,7 @@ fun IrClass.addFakeOverrides() {
                         irFunction.name,
                         Visibilities.INHERITED,
                         Modality.FINAL,
+                        irFunction.returnType,
                         irFunction.isInline,
                         irFunction.isExternal,
                         irFunction.isTailrec,
@@ -469,7 +470,6 @@ fun IrClass.addFakeOverrides() {
                 ).apply {
                     descriptor.bind(this)
                     parent = this@addFakeOverrides
-                    returnType = irFunction.returnType
                     overriddenSymbols += overriddenFunctions.map { it.symbol }
                     copyParameterDeclarationsFrom(irFunction)
                     irFunction.correspondingProperty?.let { unoverriddenSuperProperties.add(it) }

@@ -140,6 +140,7 @@ internal val Context.getUnboxFunction: (IrClass) -> IrSimpleFunction by Context.
         Name.special("<unbox>"),
         Visibilities.PUBLIC,
         Modality.FINAL,
+        returnType,
         isInline = false,
         isExternal = false,
         isTailrec = false,
@@ -147,7 +148,6 @@ internal val Context.getUnboxFunction: (IrClass) -> IrSimpleFunction by Context.
     ).apply {
         (descriptor as WrappedSimpleFunctionDescriptor).bind(this)
         parent = inlinedClass
-        this.returnType = returnType
         valueParameters.add(
             IrValueParameterImpl(
                 startOffset,

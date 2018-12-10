@@ -44,7 +44,7 @@ internal fun IrDeclaration.symbolName(): String = when (this) {
 }
 
 internal val IrDeclaration.uniqId: Long
-    get() = this.symbolName().localHash.value
+    get() = this.symbolName().localHash.value //.apply { if (this == 744676413816618719L) error("descriptor = ${this@uniqId.descriptor} symbolName = ${this@uniqId.symbolName()}")}
 
 fun <K, V> MutableMap<K, V>.putOnce(k:K, v: V): Unit {
     // TODO: there are

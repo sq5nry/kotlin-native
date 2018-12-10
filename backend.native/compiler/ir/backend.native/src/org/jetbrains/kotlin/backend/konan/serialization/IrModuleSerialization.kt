@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.backend.konan.ir.ir2stringWholezzz
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.name
 import org.jetbrains.kotlin.backend.konan.library.SerializedIr
 import org.jetbrains.kotlin.backend.konan.llvm.isExported
+import org.jetbrains.kotlin.backend.konan.llvm.localHash
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.ClassKind.*
 import org.jetbrains.kotlin.ir.IrElement
@@ -1074,7 +1075,8 @@ internal class IrModuleSerialization(
 
             val byteArray = serializeDeclaration(it).toByteArray()
             val uniqId = declarationTable.indexByValue(it)
-            println("serializing ${it.descriptor} as $uniqId")
+            // println("serializing ${it.descriptor} as $uniqId")
+            // if (!uniqId.isLocal) println("symbolName = ${it.symbolName()} ${it.symbolName().localHash.value}")
             topLevelDeclarations.put(uniqId, byteArray)
             proto.addDeclarationId(newUniqId(uniqId))
         }
