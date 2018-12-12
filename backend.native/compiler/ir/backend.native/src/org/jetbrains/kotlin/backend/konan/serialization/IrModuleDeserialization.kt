@@ -105,6 +105,12 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
             Pair(clazz, clazz.unsubstitutedMemberScope.getContributedDescriptors() + clazz.getConstructors())
         }
 
+        if (proto.packageFqName == "<root>") {
+            println("clazz = $clazz")
+            println("members = $members")
+            println("protoIndex = $protoIndex")
+        }
+
         if (proto.packageFqName.startsWith("cnames") || proto.packageFqName.startsWith("objcnames")) {
             return currentModule.findClassAcrossModuleDependencies(ClassId(packageFqName, FqName(proto.name), false))!!
         }
@@ -132,12 +138,16 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
 
             val memberIndices = realMembers.map { it.getUniqId()?.index }.filterNotNull()
 
+            if (proto.packageFqName == "<root>") {
+                println("memberIndicies = $memberIndices")
+            }
+
             if (memberIndices.contains(protoIndex)) {
 
                 if (member is PropertyDescriptor) {
                     if (proto.isSetter) return member.setter!!// ?: return@forEach
                     if (proto.isGetter) return member.getter!!
-                    if (proto.isBackingField) return member
+                    if (proto.isBackingField) return member //
                     return member
                 } else {
                     return member
@@ -154,15 +164,11 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
         val topLevelKey = proto.topLevelUniqId.uniqIdKey(deserializedModuleDescriptor!!)
 
         if (!deserializedTopLevels.contains(topLevelKey)) reachableTopLevels.add(topLevelKey)
-        //if (deserializedSymbols[topLevelKey]?.isBound != true) {
-        //    println("index for topLeve = $index")
-        //    reachableTopLevels.add(topLevelKey)
-        //}
 
         val symbol = deserializedSymbols.getOrPut(key) {
             val descriptor = if (proto.hasDescriptorReference()) {
                 val deserialized = deserializeDescriptorReference(proto.descriptorReference)
-                if (deserialized.name.asString() == "__sFILEX") println("cnames: $deserialized key=$key") else Unit
+                if (deserialized.name.asString() == "AF_INET") println("deserializeIrSymbol: $deserialized key=$key") else Unit
                 deserialized
             } else {
                 null
@@ -1138,6 +1144,7 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
 
     private fun deserializeIrField(proto: KonanIr.IrField, start: Int, end: Int, origin: IrDeclarationOrigin): IrField {
         val symbol = deserializeIrSymbol(proto.symbol) as IrFieldSymbol
+        println("deserializeIrField: symbol = $symbol, descriptor = ${symbol.descriptor}, descriptor hash = ${symbol.descriptor.hashCode()}")
         val field = IrFieldImpl(
             start, end, origin,
             symbol,
@@ -1177,6 +1184,8 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
             ?: if (proto.hasDescriptor()) deserializeDescriptorReference(proto.descriptor) as PropertyDescriptor else null
                 ?: WrappedPropertyDescriptor()
 
+        //println("backing field descriptor = $descriptor")
+
         val property = IrPropertyImpl(
             start, end, origin,
             descriptor,
@@ -1191,17 +1200,18 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
         )
 
         backingField?.descriptor?.let {
-            if (it is WrappedPropertyDescriptor) symbolTable.declareField(UNDEFINED_OFFSET,
+            /*if (it is WrappedPropertyDescriptor)*/ symbolTable.declareField(UNDEFINED_OFFSET,
                 UNDEFINED_OFFSET,
                 irrelevantOrigin,
                 it,
                 builtIns.unitType,
-                { symbol -> backingField!! })
+                { symbol -> backingField })
         }
 
         property.backingField = backingField
         backingField?.let { it.correspondingProperty = property }
 
+        //println("backing field symbol = ${backingField?.symbol} bound: ${backingField?.symbol?.isBound}")
 
         property.getter =
                 if (proto.hasGetter()) deserializeIrFunction(proto.getter, start, end, origin, property) else null
@@ -1379,6 +1389,10 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
                 reachableTopLevels.remove(key)
                 deserializedTopLevels.add(key)
             } while(reachableTopLevels.isNotEmpty())
+        }
+
+        assert(symbol.isBound) {
+            println("findDeserializedDeclaration: symbol ${symbol} is unbound, descriptor hash = ${symbol.descriptor.hashCode()}")
         }
 
         return symbol.owner as IrDeclaration

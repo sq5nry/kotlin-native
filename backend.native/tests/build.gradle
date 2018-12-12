@@ -959,12 +959,13 @@ task innerClass_secondaryConstructor(type: RunKonanTest) {
     goldValue = "42\n"
     source = "codegen/innerClass/secondaryConstructor.kt"
 }
-
+/*
 task innerClass_linkTest(type: LinkKonanTest) {
     goldValue = ""
     source = "codegen/innerClass/linkTest_main.kt"
     lib = "codegen/innerClass/linkTest_lib.kt"
 }
+*/
 
 task localClass_localHierarchy(type: RunKonanTest) {
     goldValue = "OK\n"
@@ -1156,7 +1157,7 @@ task bridges_special(type: RunKonanTest) {
 task returnTypeSignature(type: RunKonanTest) {
     source = "codegen/bridges/returnTypeSignature.kt"
 }
-
+/*
 task classDelegation_method(type: RunKonanTest) {
     goldValue = "OKOK\n"
     source = "codegen/classDelegation/method.kt"
@@ -1182,12 +1183,12 @@ task classDelegation_linkTest(type: LinkKonanTest) {
     source = "codegen/classDelegation/linkTest_main.kt"
     lib = "codegen/classDelegation/linkTest_lib.kt"
 }
-
+*/
 task contracts(type: RunStandaloneKonanTest) {
     flags = [ '-Xuse-experimental=kotlin.Experimental', '-tr' ]
     source = "codegen/contracts/contracts.kt"
 }
-
+/*
 task delegatedProperty_simpleVal(type: RunKonanTest) {
     goldValue = "x\n42\n"
     source = "codegen/delegatedProperty/simpleVal.kt"
@@ -1234,7 +1235,7 @@ task delegatedProperty_map(type: RunKonanTest) {
     goldValue = "John Doe\n25\n"
     source = "codegen/delegatedProperty/map.kt"
 }
-
+*/
 task propertyCallableReference_valClass(type: RunKonanTest) {
     goldValue = "42\n117\n"
     source = "codegen/propertyCallableReference/valClass.kt"

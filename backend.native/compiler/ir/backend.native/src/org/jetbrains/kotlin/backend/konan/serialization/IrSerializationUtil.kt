@@ -67,6 +67,9 @@ internal fun IrSimpleFunction.resolveFakeOverrideMaybeAbstract(): IrSimpleFuncti
     return realSupers.first() /*{ it.modality != Modality.ABSTRACT } */
 }
 
+internal fun IrProperty.resolveFakeOverrideMaybeAbstract() = this.getter!!.resolveFakeOverrideMaybeAbstract().correspondingProperty!!
+
+internal fun IrField.resolveFakeOverrideMaybeAbstract() = this.correspondingProperty!!.getter!!.resolveFakeOverrideMaybeAbstract().correspondingProperty!!.backingField
 
 /**
  * Implementation of given method.

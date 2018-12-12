@@ -80,15 +80,27 @@ internal class IrModuleSerialization(
     fun serializeDescriptorReference(declaration: IrDeclaration): KonanIr.DescriptorReference? {
 
         val descriptor = declaration.descriptor
-        //println("serializeDescriptorReference: $symbol for $declaration descriptor=$descriptor")
+        if (descriptor.name.asString() == "AF_INET") println("serializeDescriptorReference: declaration $declaration descriptor=$descriptor")
 
         if (!declaration.isExported()) {
+            if (descriptor.name.asString() == "AF_INET") {
+                println("is not expotred")
+            }
             return null
         }
+        if (descriptor.name.asString() == "AF_INET") println("A")
         if (declaration is IrAnonymousInitializer) return null
-        if (descriptor is ParameterDescriptor || descriptor is VariableDescriptor || descriptor is TypeParameterDescriptor) return null
+        if (descriptor.name.asString() == "AF_INET") println("B")
+
+        if (descriptor is ParameterDescriptor || (descriptor is VariableDescriptor && descriptor !is PropertyDescriptor) || descriptor is TypeParameterDescriptor) return null
+        if (descriptor.name.asString() == "AF_INET") println("C")
 
         val containingDeclaration = descriptor.containingDeclaration!!
+
+        if (descriptor.name.asString() == "AF_INET") {
+            println("containingDeclaration = $containingDeclaration")
+        }
+
         val (packageFqName, classFqName) = when (containingDeclaration) {
             is ClassDescriptor -> {
                 val classId = containingDeclaration.classId ?: return null
@@ -106,10 +118,17 @@ internal class IrModuleSerialization(
         val isEnumEntry = descriptor is ClassDescriptor && descriptor.kind == ClassKind.ENUM_ENTRY
         val isEnumSpecial = declaration.origin == IrDeclarationOrigin.ENUM_CLASS_SPECIAL_MEMBER
 
-        val realDeclaration = if (declaration is IrSimpleFunction && isFakeOverride)
-            declaration.resolveFakeOverrideMaybeAbstract()
-        else
+
+        val realDeclaration = if (isFakeOverride) {
+            when(declaration) {
+                is IrSimpleFunction -> declaration.resolveFakeOverrideMaybeAbstract()
+                is IrField -> declaration.resolveFakeOverrideMaybeAbstract()
+                is IrProperty -> declaration.resolveFakeOverrideMaybeAbstract()
+                else -> error("Unexpected fake override declaration")
+            }
+        } else {
             declaration
+        }
 
         val discoverableDescriptorsDeclaration: IrDeclaration? = if (isAccessor) {
             (realDeclaration as IrSimpleFunction).correspondingProperty!!
@@ -123,6 +142,11 @@ internal class IrModuleSerialization(
 
         val index = discoverableDescriptorsDeclaration?.let { declarationTable.indexByValue(it) }
         index?.let { descriptorTable.descriptorIndex(discoverableDescriptorsDeclaration.descriptor, it) }
+
+
+        if (descriptor.name.asString() == "AF_INET") {
+            println("declaration=$declaration, dsicoverable = $discoverableDescriptorsDeclaration, isBackingFiled = $isBackingField, index = $index")
+        }
 
         val proto = KonanIr.DescriptorReference.newBuilder()
             .setPackageFqName(packageFqName)
@@ -204,13 +228,13 @@ internal class IrModuleSerialization(
             declarationTable.indexByValue((symbol.owner as IrDeclaration).findTopLevelDeclaration())
         proto.setTopLevelUniqId(newUniqId(topLevelUniqId))
 
-        serializeDescriptorReference(declaration) ?. let { proto.setDescriptorReference(it) }
+        serializeDescriptorReference(declaration) ?. let { proto.setDescriptorReference(it) } ?: if (declaration.descriptor.name.asString() == "AF_INET") println("serializeDescriptorReference returned null!")
         //serializeDescriptorReference(declaration.findTopLevelDeclaration()) ?. let { proto.setTopLevelDescriptorReference(it) }
 
-        if (uniqId.index == 18900L) {
-                    val owner = symbol.owner as IrDeclaration
-                    println("serialized IrSymbol: index = ${uniqId.index}, descriptor = ${symbol.descriptor}, descriptorIndex = ${descriptorTable.descriptors[symbol.descriptor]},  owner = $owner symbol=$symbol owner.descriptor = ${owner.descriptor}")
-        }
+        //if (uniqId.index == 18900L) {
+        //            val owner = symbol.owner as IrDeclaration
+        //            println("serialized IrSymbol: index = ${uniqId.index}, descriptor = ${symbol.descriptor}, descriptorIndex = ${descriptorTable.descriptors[symbol.descriptor]},  owner = $owner symbol=$symbol owner.descriptor = ${owner.descriptor}")
+        //}
 
         val result = proto.build()
         return result
