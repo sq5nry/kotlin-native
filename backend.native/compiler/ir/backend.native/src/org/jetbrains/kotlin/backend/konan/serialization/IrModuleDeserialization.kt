@@ -1382,6 +1382,7 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
                 }
 
                 val reachable = deserializeTopLevelDeclaration(key)
+                println("deserialized reachable: ${reachable.descriptor}")
 
                 deserializedModuleDescriptor = previousModuleDescriptor
 
@@ -1400,14 +1401,11 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
 
     override fun declareForwardDeclarations() {
         if (forwardModuleDescriptor == null) return // null
-        println("forward module is not null: $forwardModuleDescriptor")
 
-        println("forward declarations: $forwardDeclarations")
 
         val packageFragments = forwardDeclarations.map { it.descriptor.findPackage() }.distinct()
 
         val files = packageFragments.map { packageFragment ->
-            println("forward fragment: $packageFragment")
             val symbol = IrFileSymbolImpl(packageFragment)
             val file = IrFileImpl(NaiveSourceBasedFileEntryImpl("<forward declarations pseudo-file>"), symbol)
             val symbols = forwardDeclarations
@@ -1415,7 +1413,6 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
                 .filter { it.descriptor.findPackage() == packageFragment }
             val declarations = symbols.map {
 
-                println("forward symbol: ${it.descriptor}")
                 symbolTable.declareClass(UNDEFINED_OFFSET, UNDEFINED_OFFSET, irrelevantOrigin,
                     it.descriptor as ClassDescriptor,
                     { symbol: IrClassSymbol -> IrClassImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, irrelevantOrigin, symbol) }
@@ -1429,8 +1426,6 @@ class IrModuleDeserialization(val logger: WithLogger, val currentModule: ModuleD
 
     fun deserializeIrFile(fileProto: KonanIr.IrFile, moduleDescriptor: ModuleDescriptor, deserializeAllDeclarations: Boolean): IrFile {
         val fileEntry = NaiveSourceBasedFileEntryImpl(fileProto.fileEntry.name)
-
-        println("file name = ${fileProto.fileEntry.name}")
 
         // TODO: we need to store "" in protobuf, I suppose. Or better yet, reuse fqname storage from metadata.
         val fqName = if (fileProto.fqName == "<root>") FqName.ROOT else FqName(fileProto.fqName)

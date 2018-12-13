@@ -2706,7 +2706,7 @@ task serialized_char_constant(type: LinkKonanTest) {
     lib = "serialization/char_const.kt"
     goldValue = "Ы\n"
 }
-
+/*
 task testing_annotations(type: RunStandaloneKonanTest) {
     source = "testing/annotations.kt"
     flags = ['-tr']
@@ -2732,7 +2732,7 @@ task testing_annotations(type: RunStandaloneKonanTest) {
             'Ignore: ignoredTest (kotlin.test.tests.AnnotationsKt)\nafterClass (file)\n' +
             'Test suite finished: kotlin.test.tests.AnnotationsKt\nIteration finished: 1\nTesting finished\n'
 }
-
+*/
 task testing_assertions(type: RunStandaloneKonanTest) {
     source = "testing/assertions.kt"
     flags = ['-tr']
@@ -3021,7 +3021,7 @@ task produce_dynamic(type: DynamicKonanTest) {
                 "singleton = I am single\n" +
                 "topLevel = 777 3\n"
 }
-
+/*
 task library_mismatch(type: RunStandaloneKonanTest) {
     def dir = buildDir.absolutePath
     def lib = "$projectDir/link/versioning/empty.kt"
@@ -3036,11 +3036,10 @@ task library_mismatch(type: RunStandaloneKonanTest) {
     doFirst {
         def konancScript = isWindows() ? "konanc.bat" : "konanc"
         def konanc = "$dist/bin/$konancScript"
-
-        "$konanc $lib -p library -o $dir/1.2/empty -target $currentTarget -lv 1.2".execute().waitFor()
-        "$konanc $lib -p library -o $dir/3.4/empty -target $someOtherTarget".execute().waitFor()
-        "$konanc $lib -p library -o $dir/5.6/empty -target $currentTarget -lv 5.6".execute().waitFor()
-        "$konanc $lib -p library -o $dir/7.8/empty -target $currentTarget -lv 7.8".execute().waitFor()
+        "$konanc $lib -p library -o $dir/1.2/empty -target $currentTarget -lv 1.2".execute().waitForProcessOutput()
+        "$konanc $lib -p library -o $dir/3.4/empty -target $someOtherTarget".execute().waitForProcessOutput()
+        "$konanc $lib -p library -o $dir/5.6/empty -target $currentTarget -lv 5.6".execute().waitForProcessOutput()
+        "$konanc $lib -p library -o $dir/7.8/empty -target $currentTarget -lv 7.8".execute().waitForProcessOutput()
 
     }
     source = "link/versioning/hello.kt"
@@ -3052,7 +3051,7 @@ task library_mismatch(type: RunStandaloneKonanTest) {
         "Hello, versioned world!\n"
     goldValue = isWindows() ? messages.replaceAll('\\/', '\\\\') : messages
 }
-
+*/
 if (isMac() && project.testTarget != 'wasm32') {
     def target = ext.platformManager.targetByName(project.testTarget ?: 'host').name
 
@@ -3091,7 +3090,7 @@ if (isMac() && project.testTarget != 'wasm32') {
         swiftSources = ['framework/stdlib/stdlib.swift']
     }
 }
-
+/*
 task buildKonanRegexTests(type: BuildKonanTest) {
     outputSourceSetName = "testOutputStdlib"
     compileList = [ "harmony_regex" ]
@@ -3106,7 +3105,7 @@ task runKonanRegexTests(type: RunKonanTest) {
     useFilter = false
     runnerLogger = RunKonanTest.Logger.GTEST
 }
-
+*/
 task buildKonanStdlibTests(type: BuildKonanTest) {
     outputSourceSetName = "testOutputStdlib"
     flags = [ "-Xmulti-platform", "-friend-modules", project.rootProject.file("dist/klib/common/stdlib") ]

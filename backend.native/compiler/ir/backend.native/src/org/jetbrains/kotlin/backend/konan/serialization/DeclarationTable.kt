@@ -128,7 +128,7 @@ class DeclarationTable(val builtIns: IrBuiltIns, val descriptorTable: Descriptor
             }
         }
         reverse.putOnce(index, value)
-        if (!index.isLocal /* && value.isTopLevelDeclaration*/) textual.putOnce(index, "${value.symbolName()} descriptor = ${value.descriptor}")
+        if (!index.isLocal /* && value.isTopLevelDeclaration*/) textual.put(index, "${value.symbolName()} descriptor = ${value.descriptor}")
 
         return index
     }

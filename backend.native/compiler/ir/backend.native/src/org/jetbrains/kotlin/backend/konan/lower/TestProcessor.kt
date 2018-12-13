@@ -306,7 +306,9 @@ internal class TestProcessor (val context: KonanBackendContext) {
                         /* kind                  = */ CallableMemberDescriptor.Kind.SYNTHESIZED,
                         /* source                = */ SourceElement.NO_SOURCE
                 )
-        )
+        ).also {
+            println("buildSymbol: ${it.descriptor}")
+        }
     }
 
     /**

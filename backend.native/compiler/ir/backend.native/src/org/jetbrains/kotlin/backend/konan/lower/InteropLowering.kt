@@ -573,7 +573,7 @@ internal class InteropLoweringPart1(val context: Context) : IrBuildingTransforme
         val superClass = superQualifier?.let { getObjCClass(it) } ?:
                 irCall(symbols.getNativeNullPtr, symbols.nativePtrType)
 
-        val bridge = symbolTable.referenceSimpleFunction(info.bridge)
+        val bridge = symbols.lazySymbolTable.referenceSimpleFunction(info.bridge)
         return irCall(bridge, symbolTable.translateErased(info.bridge.returnType!!)).apply {
             putValueArgument(0, superClass)
             putValueArgument(1, receiver)

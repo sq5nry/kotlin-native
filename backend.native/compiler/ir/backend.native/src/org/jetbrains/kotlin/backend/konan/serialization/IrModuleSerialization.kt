@@ -80,24 +80,24 @@ internal class IrModuleSerialization(
     fun serializeDescriptorReference(declaration: IrDeclaration): KonanIr.DescriptorReference? {
 
         val descriptor = declaration.descriptor
-        if (descriptor.name.asString() == "AF_INET") println("serializeDescriptorReference: declaration $declaration descriptor=$descriptor")
+        if (descriptor.name.asString() == "Z_OK") println("serializeDescriptorReference: declaration $declaration descriptor=$descriptor")
 
         if (!declaration.isExported()) {
-            if (descriptor.name.asString() == "AF_INET") {
+            if (descriptor.name.asString() == "Z_OK") {
                 println("is not expotred")
             }
             return null
         }
-        if (descriptor.name.asString() == "AF_INET") println("A")
+        if (descriptor.name.asString() == "Z_OK") println("A")
         if (declaration is IrAnonymousInitializer) return null
-        if (descriptor.name.asString() == "AF_INET") println("B")
+        if (descriptor.name.asString() == "Z_OK") println("B")
 
         if (descriptor is ParameterDescriptor || (descriptor is VariableDescriptor && descriptor !is PropertyDescriptor) || descriptor is TypeParameterDescriptor) return null
-        if (descriptor.name.asString() == "AF_INET") println("C")
+        if (descriptor.name.asString() == "Z_OK") println("C")
 
         val containingDeclaration = descriptor.containingDeclaration!!
 
-        if (descriptor.name.asString() == "AF_INET") {
+        if (descriptor.name.asString() == "Z_OK") {
             println("containingDeclaration = $containingDeclaration")
         }
 
@@ -144,7 +144,7 @@ internal class IrModuleSerialization(
         index?.let { descriptorTable.descriptorIndex(discoverableDescriptorsDeclaration.descriptor, it) }
 
 
-        if (descriptor.name.asString() == "AF_INET") {
+        if (descriptor.name.asString() == "Z_OK") {
             println("declaration=$declaration, dsicoverable = $discoverableDescriptorsDeclaration, isBackingFiled = $isBackingField, index = $index")
         }
 
@@ -228,7 +228,10 @@ internal class IrModuleSerialization(
             declarationTable.indexByValue((symbol.owner as IrDeclaration).findTopLevelDeclaration())
         proto.setTopLevelUniqId(newUniqId(topLevelUniqId))
 
-        serializeDescriptorReference(declaration) ?. let { proto.setDescriptorReference(it) } ?: if (declaration.descriptor.name.asString() == "AF_INET") println("serializeDescriptorReference returned null!")
+        serializeDescriptorReference(declaration) ?. let {
+            if (declaration.descriptor.name.asString() == "Z_OK") println("serializeDescriptorReference returned: $it")
+            proto.setDescriptorReference(it)
+        } ?: if (declaration.descriptor.name.asString() == "Z_OK") println("serializeDescriptorReference returned null!")
         //serializeDescriptorReference(declaration.findTopLevelDeclaration()) ?. let { proto.setTopLevelDescriptorReference(it) }
 
         //if (uniqId.index == 18900L) {
