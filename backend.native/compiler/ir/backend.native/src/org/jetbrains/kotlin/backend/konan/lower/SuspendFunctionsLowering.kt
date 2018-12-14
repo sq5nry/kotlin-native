@@ -266,7 +266,7 @@ internal class SuspendFunctionsLowering(val context: Context): FileLoweringPass 
                     IrClassSymbolImpl(it),
                     "${irFunction.name}\$COROUTINE\$${context.coroutineCount++}".synthesizedName,
                     ClassKind.CLASS,
-                    Visibilities.PUBLIC,
+                    Visibilities.PRIVATE,
                     Modality.FINAL,
                     isCompanion = false,
                     isInline = false,
@@ -353,8 +353,8 @@ internal class SuspendFunctionsLowering(val context: Context): FileLoweringPass 
                         suspendFunctionClass!!.simpleFunctions().single { it.name.asString() == "invoke" }.symbol
 
                 buildInvokeMethod(
-                        suspendFunctionInvokeFunctionSymbol = invokeFunctionSymbol,
-                        functionInvokeFunctionSymbol = suspendInvokeFunctionSymbol,
+                        suspendFunctionInvokeFunctionSymbol = suspendInvokeFunctionSymbol,
+                        functionInvokeFunctionSymbol = invokeFunctionSymbol,
                         createFunction = createMethod,
                         invokeSuspendFunction = invokeSuspendMethod)
             }
@@ -693,7 +693,7 @@ internal class SuspendFunctionsLowering(val context: Context): FileLoweringPass 
                         return suspensionPoint
                     }
                 })
-                originalBody.patchDeclarationParents(function)
+                originalBody.setDeclarationsParent(function)
                 val statements = (originalBody as IrBlockBody).statements
                 +suspendResult
                 +IrSuspendableExpressionImpl(

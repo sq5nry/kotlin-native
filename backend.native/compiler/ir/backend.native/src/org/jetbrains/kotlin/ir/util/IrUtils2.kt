@@ -277,7 +277,7 @@ fun IrClass.addFakeOverrides() {
                         IrSimpleFunctionSymbolImpl(descriptor),
                         irFunction.name,
                         Visibilities.INHERITED,
-                        Modality.FINAL,
+                        Modality.OPEN,
                         irFunction.returnType,
                         irFunction.isInline,
                         irFunction.isExternal,
@@ -297,35 +297,35 @@ fun IrClass.addFakeOverrides() {
             .associate { it.value.first() to createFakeOverride(it.value) }
             .toMutableMap()
 
-    for (property in unoverriddenSuperProperties) {
-        val getter = fakeOverriddenFunctions[property.getter]
-        val setter = fakeOverriddenFunctions[property.setter]
-        val descriptor = WrappedPropertyDescriptor()
-        val fakeOverriddenProperty = IrPropertyImpl(
-                UNDEFINED_OFFSET,
-                UNDEFINED_OFFSET,
-                IrDeclarationOrigin.FAKE_OVERRIDE,
-                descriptor,
-                property.name,
-                Visibilities.INHERITED,
-                Modality.FINAL,
-                property.isVar,
-                property.isConst,
-                property.isLateinit,
-                property.isDelegated,
-                property.isExternal
-        ).also {
-            it.parent = this@addFakeOverrides
-            it.getter = getter ?: property.getter
-            it.setter = setter ?: property.setter
-            getter?.correspondingProperty = it
-            setter?.correspondingProperty = it
-            descriptor.bind(it)
-        }
-        declarations += fakeOverriddenProperty
-        property.getter?.let { fakeOverriddenFunctions.remove(it) }
-        property.setter?.let { fakeOverriddenFunctions.remove(it) }
-    }
+//    for (property in unoverriddenSuperProperties) {
+//        val getter = fakeOverriddenFunctions[property.getter]
+//        val setter = fakeOverriddenFunctions[property.setter]
+//        val descriptor = WrappedPropertyDescriptor()
+//        val fakeOverriddenProperty = IrPropertyImpl(
+//                UNDEFINED_OFFSET,
+//                UNDEFINED_OFFSET,
+//                IrDeclarationOrigin.FAKE_OVERRIDE,
+//                descriptor,
+//                property.name,
+//                Visibilities.INHERITED,
+//                Modality.FINAL,
+//                property.isVar,
+//                property.isConst,
+//                property.isLateinit,
+//                property.isDelegated,
+//                property.isExternal
+//        ).also {
+//            it.parent = this@addFakeOverrides
+//            it.getter = getter ?: property.getter
+//            it.setter = setter ?: property.setter
+//            getter?.correspondingProperty = it
+//            setter?.correspondingProperty = it
+//            descriptor.bind(it)
+//        }
+//        declarations += fakeOverriddenProperty
+//        property.getter?.let { fakeOverriddenFunctions.remove(it) }
+//        property.setter?.let { fakeOverriddenFunctions.remove(it) }
+//    }
 
     declarations += fakeOverriddenFunctions.values
 }
@@ -354,6 +354,11 @@ fun IrDeclarationContainer.addChildren(declarations: List<IrDeclaration>) {
 fun IrDeclarationContainer.addChild(declaration: IrDeclaration) {
     this.declarations += declaration
     declaration.accept(SetDeclarationsParentVisitor, this)
+}
+
+fun <T: IrElement> T.setDeclarationsParent(parent: IrDeclarationParent): T {
+    accept(SetDeclarationsParentVisitor, parent)
+    return this
 }
 
 object SetDeclarationsParentVisitor : IrElementVisitor<Unit, IrDeclarationParent> {

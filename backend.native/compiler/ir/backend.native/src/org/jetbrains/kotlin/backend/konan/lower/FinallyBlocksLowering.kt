@@ -25,7 +25,7 @@ import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.symbols.impl.IrVariableSymbolImpl
 import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.util.defaultType
-import org.jetbrains.kotlin.ir.util.patchDeclarationParents
+import org.jetbrains.kotlin.ir.util.setDeclarationsParent
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
 import org.jetbrains.kotlin.name.Name
 
@@ -285,7 +285,7 @@ internal class FinallyBlocksLowering(val context: Context): FileLoweringPass, Ir
     }
 
     private inline fun <reified T : IrElement> IrBuilderWithScope.copy(element: T) =
-            element.deepCopyWithVariables().patchDeclarationParents(parent)
+            element.deepCopyWithVariables().setDeclarationsParent(parent)
 
     fun IrBuilderWithScope.irReturn(target: IrReturnTargetSymbol, value: IrExpression) =
             IrReturnImpl(startOffset, endOffset, context.irBuiltIns.nothingType, target, value)

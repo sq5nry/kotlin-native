@@ -10,7 +10,6 @@ import org.jetbrains.kotlin.backend.common.lower.*
 import org.jetbrains.kotlin.backend.konan.Context
 import org.jetbrains.kotlin.backend.konan.descriptors.resolveFakeOverride
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.isReal
-import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.builders.*
 import org.jetbrains.kotlin.ir.declarations.*
@@ -21,9 +20,6 @@ import org.jetbrains.kotlin.ir.expressions.IrPropertyReference
 import org.jetbrains.kotlin.ir.expressions.impl.IrConstImpl
 import org.jetbrains.kotlin.ir.symbols.IrVariableSymbol
 import org.jetbrains.kotlin.ir.util.dump
-import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
-import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
-import org.jetbrains.kotlin.ir.visitors.acceptVoid
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
 import org.jetbrains.kotlin.name.Name
 
@@ -35,22 +31,6 @@ internal class LateinitLowering(
     private val isInitializedGetter = context.ir.symbols.isInitializedGetter
 
     override fun lower(irFile: IrFile) {
-        val lateinitPropertyToField = mutableMapOf<IrProperty, IrField>()
-
-        irFile.acceptVoid(object : IrElementVisitorVoid {
-            override fun visitElement(element: IrElement) {
-                element.acceptChildrenVoid(this)
-            }
-
-            override fun visitProperty(declaration: IrProperty) {
-                super.visitProperty(declaration)
-
-                if (declaration.isLateinit && declaration.isReal) {
-                    lateinitPropertyToField[declaration] = declaration.backingField!!
-                }
-            }
-        })
-
         irFile.transformChildrenVoid(object : IrBuildingTransformer(context) {
 
             override fun visitVariable(declaration: IrVariable): IrStatement {
@@ -96,7 +76,7 @@ internal class LateinitLowering(
                 val property = getter.resolveFakeOverride().correspondingProperty!!
 
                 builder.at(expression).run {
-                    val field = lateinitPropertyToField[property]!!
+                    val field = property.backingField!!
                     val fieldValue = irGetField(propertyReference.dispatchReceiver, field)
                     return irNotEquals(fieldValue, irNull())
                 }

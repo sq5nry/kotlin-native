@@ -180,8 +180,7 @@ internal class CallableReferenceLowering(val context: Context): FileLoweringPass
 
         private val kFunctionImplConstructorSymbol = kFunctionImplSymbol.constructors.single()
 
-        val isKFunction = functionReference.type.classifierOrNull?.descriptor
-                ?.getFunctionalClassKind() == FunctionClassDescriptor.Kind.KFunction
+        val isKFunction = functionReference.type.isKFunction()
 
         fun build(): BuiltFunctionReference {
 

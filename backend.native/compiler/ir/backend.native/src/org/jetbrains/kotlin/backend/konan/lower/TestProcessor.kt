@@ -5,38 +5,35 @@
 
 package org.jetbrains.kotlin.backend.konan.lower
 
-import org.jetbrains.kotlin.backend.common.descriptors.replace
-import org.jetbrains.kotlin.backend.common.ir.createFakeOverrideDescriptor
-import org.jetbrains.kotlin.backend.common.lower.SimpleMemberScope
+import org.jetbrains.kotlin.backend.common.descriptors.WrappedClassConstructorDescriptor
+import org.jetbrains.kotlin.backend.common.descriptors.WrappedClassDescriptor
+import org.jetbrains.kotlin.backend.common.descriptors.WrappedSimpleFunctionDescriptor
 import org.jetbrains.kotlin.backend.common.lower.SymbolWithIrBuilder
 import org.jetbrains.kotlin.backend.common.lower.createIrBuilder
 import org.jetbrains.kotlin.backend.common.reportWarning
 import org.jetbrains.kotlin.backend.konan.KonanBackendContext
 import org.jetbrains.kotlin.backend.konan.descriptors.isAbstract
 import org.jetbrains.kotlin.backend.konan.descriptors.synthesizedName
+import org.jetbrains.kotlin.backend.konan.irasdescriptors.fqNameSafe
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.typeWithStarProjections
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.typeWithoutArguments
 import org.jetbrains.kotlin.backend.konan.reportCompilationError
-import org.jetbrains.kotlin.builtins.KotlinBuiltIns
-import org.jetbrains.kotlin.builtins.isFunctionType
 import org.jetbrains.kotlin.descriptors.*
-import org.jetbrains.kotlin.descriptors.annotations.Annotations
-import org.jetbrains.kotlin.descriptors.impl.ClassConstructorDescriptorImpl
-import org.jetbrains.kotlin.descriptors.impl.ClassDescriptorImpl
-import org.jetbrains.kotlin.descriptors.impl.SimpleFunctionDescriptorImpl
-import org.jetbrains.kotlin.incremental.components.NoLookupLocation
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.builders.*
 import org.jetbrains.kotlin.ir.declarations.*
+import org.jetbrains.kotlin.ir.declarations.impl.IrClassImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrConstructorImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrFunctionImpl
 import org.jetbrains.kotlin.ir.expressions.impl.*
 import org.jetbrains.kotlin.ir.symbols.*
+import org.jetbrains.kotlin.ir.symbols.impl.IrClassSymbolImpl
 import org.jetbrains.kotlin.ir.symbols.impl.IrConstructorSymbolImpl
 import org.jetbrains.kotlin.ir.symbols.impl.IrSimpleFunctionSymbolImpl
 import org.jetbrains.kotlin.ir.types.IrType
-import org.jetbrains.kotlin.ir.types.toKotlinType
+import org.jetbrains.kotlin.ir.types.classifierOrNull
+import org.jetbrains.kotlin.ir.types.typeWith
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
 import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
@@ -44,7 +41,6 @@ import org.jetbrains.kotlin.load.kotlin.PackagePartClassUtils
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
-import org.jetbrains.kotlin.storage.LockBasedStorageManager
 import org.jetbrains.kotlin.types.KotlinType
 
 internal class TestProcessor (val context: KonanBackendContext) {
@@ -60,8 +56,6 @@ internal class TestProcessor (val context: KonanBackendContext) {
     }
 
     val symbols = context.ir.symbols
-
-    val baseClassSuiteDescriptor = symbols.baseClassSuite.descriptor
 
     private val topLevelSuiteNames = mutableSetOf<String>()
 
@@ -271,60 +265,37 @@ internal class TestProcessor (val context: KonanBackendContext) {
 
     //region Symbol and IR builders
 
-    /** Base class for getters (createInstance and getCompanion). */
-    private abstract inner class GetterBuilder(val returnType: IrType,
-                                               val testSuite: IrClassSymbol,
-                                               val getterName: Name)
-        : SymbolWithIrBuilder<IrSimpleFunctionSymbol, IrFunction>() {
-
-        val superFunction = baseClassSuiteDescriptor
-                .unsubstitutedMemberScope
-                .getContributedFunctions(getterName, NoLookupLocation.FROM_BACKEND)
-                .single { it.valueParameters.isEmpty() }
-
-
-        override fun doInitialize() {
-            val descriptor = symbol.descriptor as SimpleFunctionDescriptorImpl
-            descriptor.initialize(
-                    /* receiverParameterType        = */ null,
-                    /* dispatchReceiverParameter    = */ testSuite.descriptor.thisAsReceiverParameter,
-                    /* typeParameters               = */ emptyList(),
-                    /* unsubstitutedValueParameters = */ emptyList(),
-                    /* returnType                   = */ returnType.toKotlinType(),
-                    /* modality                     = */ Modality.FINAL,
-                    /* visibility                   = */ Visibilities.PROTECTED
-            ).apply {
-                overriddenDescriptors += superFunction
-            }
-        }
-
-        override fun buildSymbol() = IrSimpleFunctionSymbolImpl(
-                SimpleFunctionDescriptorImpl.create(
-                        /* containingDeclaration = */ testSuite.descriptor,
-                        /* annotations           = */ Annotations.EMPTY,
-                        /* name                  = */ getterName,
-                        /* kind                  = */ CallableMemberDescriptor.Kind.SYNTHESIZED,
-                        /* source                = */ SourceElement.NO_SOURCE
-                )
-        )
-    }
-
     /**
      * Builds a method in `[testSuite]` class with name `[getterName]`
      * returning a reference to an object represented by `[objectSymbol]`.
      */
-    private inner class ObjectGetterBuilder(val objectSymbol: IrClassSymbol, testSuite: IrClassSymbol, getterName: Name)
-        : GetterBuilder(objectSymbol.typeWithoutArguments, testSuite, getterName) {
+    private fun buildObjectGetter(objectSymbol: IrClassSymbol, owner: IrClass, getterName: Name)
+        : IrFunction {
 
-        override fun buildIr(): IrFunction = IrFunctionImpl(
+        val symbol = IrSimpleFunctionSymbolImpl(WrappedSimpleFunctionDescriptor())
+        return IrFunctionImpl(
                 UNDEFINED_OFFSET, UNDEFINED_OFFSET,
                 TEST_SUITE_GENERATED_MEMBER,
                 symbol,
-                this@ObjectGetterBuilder.returnType
+                getterName,
+                Visibilities.PROTECTED,
+                Modality.FINAL,
+                objectSymbol.typeWithStarProjections,
+                isInline = false,
+                isExternal = false,
+                isTailrec = false,
+                isSuspend = false
         ).apply {
-            val builder = context.createIrBuilder(symbol)
-            createParameterDeclarations(context.ir.symbols.symbolTable)
-            body = builder.irBlockBody {
+            (descriptor as WrappedSimpleFunctionDescriptor).bind(this)
+            parent = owner
+
+            val superFunction = symbols.baseClassSuite.owner.simpleFunctions()
+                    .single { it.name == getterName && it.valueParameters.isEmpty() }
+
+            createDispatchReceiverParameter()
+            overriddenSymbols += superFunction.symbol
+
+            body = context.createIrBuilder(symbol).irBlockBody {
                 +irReturn(IrGetObjectValueImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET,
                         objectSymbol.typeWithoutArguments, objectSymbol)
                 )
@@ -336,18 +307,33 @@ internal class TestProcessor (val context: KonanBackendContext) {
      * Builds a method in `[testSuite]` class with name `[getterName]`
      * returning a new instance of class referenced by [classSymbol].
      */
-    private inner class InstanceGetterBuilder(val classSymbol: IrClassSymbol, testSuite: IrClassSymbol, getterName: Name)
-        : GetterBuilder(classSymbol.typeWithStarProjections, testSuite, getterName) {
+    private fun buildInstanceGetter(classSymbol: IrClassSymbol, owner: IrClass, getterName: Name)
+        : IrFunction {
 
-        override fun buildIr() = IrFunctionImpl(
+        val symbol = IrSimpleFunctionSymbolImpl(WrappedSimpleFunctionDescriptor())
+        return IrFunctionImpl(
                 UNDEFINED_OFFSET, UNDEFINED_OFFSET,
                 TEST_SUITE_GENERATED_MEMBER,
                 symbol,
-                this@InstanceGetterBuilder.returnType
+                getterName,
+                Visibilities.PROTECTED,
+                Modality.FINAL,
+                classSymbol.typeWithStarProjections,
+                isInline = false,
+                isExternal = false,
+                isTailrec = false,
+                isSuspend = false
         ).apply {
-            val builder = context.createIrBuilder(symbol)
-            createParameterDeclarations(context.ir.symbols.symbolTable)
-            body = builder.irBlockBody {
+            (descriptor as WrappedSimpleFunctionDescriptor).bind(this)
+            parent = owner
+
+            val superFunction = symbols.baseClassSuite.owner.simpleFunctions()
+                    .single { it.name == getterName && it.valueParameters.isEmpty() }
+
+            createDispatchReceiverParameter()
+            overriddenSymbols += superFunction.symbol
+
+            body = context.createIrBuilder(symbol).irBlockBody {
                 val constructor = classSymbol.owner.constructors.single { it.valueParameters.isEmpty() }
                 +irReturn(irCall(constructor))
             }
@@ -359,52 +345,54 @@ internal class TestProcessor (val context: KonanBackendContext) {
      * method(s) annotated with @Test). The test suite class is a subclass of ClassTestSuite<T>
      * where T is the test class.
      */
-    private inner class ClassSuiteConstructorBuilder(val suiteName: String,
-                                                     val testClassType: KotlinType,
-                                                     val testCompanionType: KotlinType,
-                                                     val testSuite: IrClassSymbol,
-                                                     val functions: Collection<TestFunction>,
-                                                     val ignored: Boolean)
-        : SymbolWithIrBuilder<IrConstructorSymbol, IrConstructor>() {
-
-        private fun IrClassSymbol.getFunction(name: String, predicate: (FunctionDescriptor) -> Boolean) =
-                symbols.symbolTable.referenceFunction(descriptor.unsubstitutedMemberScope
-                        .getContributedFunctions(Name.identifier(name), NoLookupLocation.FROM_BACKEND)
-                        .single(predicate))
-
-        override fun buildIr() = IrConstructorImpl(
+    private fun buildClassSuiteConstructor(suiteName: String,
+                                           testClassType: IrType,
+                                           testCompanionType: IrType,
+                                           testSuite: IrClassSymbol,
+                                           owner: IrClass,
+                                           functions: Collection<TestFunction>,
+                                           ignored: Boolean) = WrappedClassConstructorDescriptor().let { descriptor ->
+        IrConstructorImpl(
                 UNDEFINED_OFFSET, UNDEFINED_OFFSET,
                 TEST_SUITE_GENERATED_MEMBER,
-                symbol,
-                testSuite.typeWithStarProjections
+                IrConstructorSymbolImpl(descriptor),
+                Name.special("<init>"),
+                Visibilities.PUBLIC,
+                testSuite.typeWithStarProjections,
+                isInline = false,
+                isExternal = false,
+                isPrimary = true
         ).apply {
+            descriptor.bind(this)
+            parent = owner
 
-            createParameterDeclarations(context.ir.symbols.symbolTable)
+            fun IrClass.getFunction(name: String, predicate: (IrSimpleFunction) -> Boolean) =
+                    simpleFunctions().single { it.name.asString() == name && predicate(it) }
 
-            val registerTestCase = symbols.baseClassSuite.getFunction("registerTestCase") {
+            val registerTestCase = symbols.baseClassSuite.owner.getFunction("registerTestCase") {
                 it.valueParameters.size == 3 &&
-                KotlinBuiltIns.isString(it.valueParameters[0].type) && // name: String
-                it.valueParameters[1].type.isFunctionType &&           // function: testClassType.() -> Unit
-                KotlinBuiltIns.isBoolean(it.valueParameters[2].type)   // ignored: Boolean
+                it.valueParameters[0].type.classifierOrNull == context.irBuiltIns.stringClass && // name: String
+                it.valueParameters[1].type.isFunction() &&           // function: testClassType.() -> Unit
+                it.valueParameters[2].type.classifierOrNull == context.irBuiltIns.booleanClass   // ignored: Boolean
             }
-            val registerFunction = symbols.baseClassSuite.getFunction("registerFunction") {
+            val registerFunction = symbols.baseClassSuite.owner.getFunction("registerFunction") {
                 it.valueParameters.size == 2 &&
-                it.valueParameters[0].type == symbols.testFunctionKind.descriptor.defaultType && // kind: TestFunctionKind
-                it.valueParameters[1].type.isFunctionType                                        // function: () -> Unit
+                it.valueParameters[0].type.classifierOrNull == symbols.testFunctionKind && // kind: TestFunctionKind
+                it.valueParameters[1].type.isFunction()                                    // function: () -> Unit
             }
 
             body = context.createIrBuilder(symbol).irBlockBody {
                 val superConstructor = symbols.baseClassSuiteConstructor
                 +IrDelegatingConstructorCallImpl(
-                        startOffset =   UNDEFINED_OFFSET,
-                        endOffset =     UNDEFINED_OFFSET,
-                        type =          context.irBuiltIns.unitType,
-                        symbol =        symbols.symbolTable.referenceConstructor(superConstructor),
-                        descriptor =    superConstructor,
-                        typeArgumentsCount = 2
+                        UNDEFINED_OFFSET, UNDEFINED_OFFSET,
+                        context.irBuiltIns.unitType,
+                        symbols.symbolTable.referenceConstructor(superConstructor),
+                        superConstructor,
+                        typeArgumentsCount = 2,
+                        valueArgumentsCount = 2
                 ).apply {
-                    putTypeArgument(0, testClassType.toErasedIrType())
-                    putTypeArgument(1, testCompanionType.toErasedIrType())
+                    putTypeArgument(0, testClassType)
+                    putTypeArgument(1, testCompanionType)
 
                     putValueArgument(0, IrConstImpl.string(
                             UNDEFINED_OFFSET,
@@ -420,134 +408,80 @@ internal class TestProcessor (val context: KonanBackendContext) {
                     ))
                 }
                 generateFunctionRegistration(testSuite.owner.thisReceiver!!,
-                        registerTestCase, registerFunction, functions)
+                        registerTestCase.symbol, registerFunction.symbol, functions)
             }
         }
-
-        override fun doInitialize() {
-            val descriptor = symbol.descriptor as ClassConstructorDescriptorImpl
-            descriptor.initialize(emptyList(), Visibilities.PUBLIC).apply {
-                returnType = testSuite.descriptor.defaultType
-            }
-        }
-
-        override fun buildSymbol() = IrConstructorSymbolImpl(
-                ClassConstructorDescriptorImpl.createSynthesized(
-                        testSuite.descriptor,
-                        Annotations.EMPTY,
-                        true,
-                        SourceElement.NO_SOURCE
-                )
-        )
     }
 
     private fun KotlinType.toErasedIrType(): IrType = context.ir.translateErased(this)
+
+    private val IrClassSymbol.ignored: Boolean get() = descriptor.annotations.hasAnnotation(IGNORE_FQ_NAME)
+    private val IrClassSymbol.isObject: Boolean get() = descriptor.kind == ClassKind.OBJECT
 
     /**
      * Builds a test suite class representing a test class (any class in the original IrFile with method(s)
      * annotated with @Test). The test suite class is a subclass of ClassTestSuite<T> where T is the test class.
      */
-    private inner class ClassSuiteBuilder(testClass: IrClassSymbol,
-                                          testCompanion: IrClassSymbol?,
-                                          val containingDeclaration: DeclarationDescriptor,
-                                          val functions: Collection<TestFunction>)
-        : SymbolWithIrBuilder<IrClassSymbol, IrClass>() {
-
-        private val IrClassSymbol.ignored: Boolean  get() = descriptor.annotations.hasAnnotation(IGNORE_FQ_NAME)
-        private val IrClassSymbol.isObject: Boolean get() = descriptor.kind == ClassKind.OBJECT
-
-        val suiteName = testClass.descriptor.fqNameSafe.toString()
-        val suiteClassName = testClass.descriptor.name.synthesizeSuiteClassName()
-
-        val testClassType = testClass.descriptor.defaultType
-        val testCompanionType = if (testClass.isObject) {
-            testClassType
-        } else {
-            testCompanion?.descriptor?.defaultType ?: context.irBuiltIns.nothing
-        }
-
-        val superType = baseClassSuiteDescriptor.defaultType.replace(listOf(testClassType, testCompanionType))
-
-        val constructorBuilder = ClassSuiteConstructorBuilder(
-            suiteName, testClassType, testCompanionType, symbol, functions, testClass.ignored
-        )
-
-        val instanceGetterBuilder: GetterBuilder
-        val companionGetterBuilder: GetterBuilder?
-
-        init {
-            if (testClass.isObject) {
-                instanceGetterBuilder = ObjectGetterBuilder(testClass, symbol, INSTANCE_GETTER_NAME)
-                companionGetterBuilder = ObjectGetterBuilder(testClass, symbol, COMPANION_GETTER_NAME)
-            } else {
-                instanceGetterBuilder = InstanceGetterBuilder(testClass, symbol, INSTANCE_GETTER_NAME)
-                companionGetterBuilder = testCompanion?.let {
-                    ObjectGetterBuilder(it, symbol, COMPANION_GETTER_NAME)
-                }
-            }
-        }
-
-        override fun buildIr() = symbols.symbolTable.declareClass(
-                UNDEFINED_OFFSET,
-                UNDEFINED_OFFSET,
+    private fun buildClassSuite(testClass: IrClassSymbol,
+                                testCompanion: IrClassSymbol?,
+                                functions: Collection<TestFunction>) = WrappedClassDescriptor().let { descriptor ->
+        IrClassImpl(
+                UNDEFINED_OFFSET, UNDEFINED_OFFSET,
                 TEST_SUITE_CLASS,
-                symbol.descriptor).apply {
+                IrClassSymbolImpl(descriptor),
+                testClass.owner.name.synthesizeSuiteClassName(),
+                ClassKind.CLASS,
+                Visibilities.PRIVATE,
+                Modality.FINAL,
+                isCompanion = false,
+                isInner = false,
+                isData = false,
+                isExternal = false,
+                isInline = false
+        ).apply {
+            descriptor.bind(this)
             createParameterDeclarations()
-            addMember(constructorBuilder.ir)
-            addMember(instanceGetterBuilder.ir)
-            companionGetterBuilder?.let { addMember(it.ir) }
-            addFakeOverrides(symbols.symbolTable)
-            setSuperSymbols(symbols.symbolTable)
-        }
 
-        override fun doInitialize() {
-            val descriptor = symbol.descriptor as ClassDescriptorImpl
-            val constructorDescriptor = constructorBuilder.symbol.descriptor
+            val testClassType = testClass.owner.defaultType
+            val testCompanionType = if (testClass.isObject) {
+                testClassType
+            } else {
+                testCompanion?.owner?.defaultType ?: context.irBuiltIns.nothingType
+            }
 
-            val contributedDescriptors = baseClassSuiteDescriptor
-                    .unsubstitutedMemberScope
-                    .getContributedDescriptors()
-                    .map {
-                        when {
-                            it == instanceGetterBuilder.superFunction -> instanceGetterBuilder.symbol.descriptor
-                            it == companionGetterBuilder?.superFunction -> companionGetterBuilder.symbol.descriptor
-                            else -> it.createFakeOverrideDescriptor(symbol.descriptor as ClassDescriptorImpl)
-                        }
-                    }.filterNotNull()
-
-            descriptor.initialize(
-                    SimpleMemberScope(contributedDescriptors),setOf(constructorDescriptor), constructorDescriptor
+            val constructor = buildClassSuiteConstructor(
+                    testClass.owner.fqNameSafe.toString(), testClassType, testCompanionType,
+                    symbol, this, functions, testClass.ignored
             )
 
-            constructorBuilder.initialize()
-            instanceGetterBuilder.initialize()
-            companionGetterBuilder?.initialize()
-        }
+            val instanceGetterBuilder: IrFunction
+            val companionGetterBuilder: IrFunction?
 
-        override fun buildSymbol() = symbols.symbolTable.referenceClass(
-                ClassDescriptorImpl(
-                        /* containingDeclaration = */ containingDeclaration,
-                        /* name                  = */ suiteClassName,
-                        /* modality              = */ Modality.FINAL,
-                        /* kind                  = */ ClassKind.CLASS,
-                        /* superTypes            = */ listOf(superType),
-                        /* source                = */ SourceElement.NO_SOURCE,
-                        /* isExternal            = */ false,
-                        /* storageManager        = */ LockBasedStorageManager.NO_LOCKS
-                )
-        )
+            if (testClass.isObject) {
+                instanceGetterBuilder = buildObjectGetter(testClass, this, INSTANCE_GETTER_NAME)
+                companionGetterBuilder = buildObjectGetter(testClass, this, COMPANION_GETTER_NAME)
+            } else {
+                instanceGetterBuilder = buildInstanceGetter(testClass, this, INSTANCE_GETTER_NAME)
+                companionGetterBuilder = testCompanion?.let {
+                    buildObjectGetter(it, this, COMPANION_GETTER_NAME)
+                }
+            }
+
+            declarations += constructor
+            declarations += instanceGetterBuilder
+            companionGetterBuilder?.let { declarations += it }
+
+            superTypes += symbols.baseClassSuite.typeWith(listOf(testClassType, testCompanionType))
+            addFakeOverrides()
+        }
     }
     //endregion
 
     // region IR generation methods
     private fun generateClassSuite(irFile: IrFile, testClass: TestClass) =
-            with(ClassSuiteBuilder(testClass.ownerClass,
-                    testClass.companion,
-                    irFile.packageFragmentDescriptor,
-                    testClass.functions)) {
-                initialize()
-                irFile.addChild(ir)
-                val irConstructor = ir.constructors.single()
+            with(buildClassSuite(testClass.ownerClass, testClass.companion,testClass.functions)) {
+                irFile.addChild(this)
+                val irConstructor = constructors.single()
                 irFile.addTopLevelInitializer(
                         IrCallImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, irConstructor.returnType, irConstructor.symbol),
                         context, threadLocal = true)

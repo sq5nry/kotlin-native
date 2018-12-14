@@ -21,6 +21,7 @@ import org.jetbrains.kotlin.ir.expressions.impl.IrSetFieldImpl
 import org.jetbrains.kotlin.ir.symbols.IrConstructorSymbol
 import org.jetbrains.kotlin.ir.symbols.IrFieldSymbol
 import org.jetbrains.kotlin.ir.types.IrSimpleType
+import org.jetbrains.kotlin.ir.types.classifierOrNull
 import org.jetbrains.kotlin.ir.util.dump
 import org.jetbrains.kotlin.ir.util.parentAsClass
 import org.jetbrains.kotlin.ir.util.transformFlat
@@ -101,7 +102,7 @@ internal class InnerClassLowering(val context: Context) : ClassLoweringPass {
 
                         val currentFunctionReceiver = currentIrFunction.dispatchReceiverParameter
                         val thisParameter =
-                                if ((currentFunctionReceiver?.type as? IrSimpleType)?.classifier == irClass.symbol)
+                                if (currentFunctionReceiver?.type?.classifierOrNull == irClass.symbol)
                                     currentFunctionReceiver
                                 else
                                     irClass.thisReceiver!!

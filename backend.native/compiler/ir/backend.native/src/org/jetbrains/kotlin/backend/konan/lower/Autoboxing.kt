@@ -390,7 +390,7 @@ private class InlineClassTransformer(private val context: Context) : IrBuildingT
             }
 
             (irConstructor.body as IrBlockBody).statements.forEach { statement ->
-                statement.patchDeclarationParents(result)
+                statement.setDeclarationsParent(result)
                 +statement.transform(object : IrElementTransformerVoid() {
                     override fun visitDelegatingConstructorCall(expression: IrDelegatingConstructorCall): IrExpression {
                         expression.transformChildrenVoid()
